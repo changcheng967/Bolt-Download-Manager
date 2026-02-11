@@ -66,7 +66,10 @@ public:
     // Steal work from another segment (split remaining bytes)
     [[nodiscard]] std::uint64_t can_steal(std::uint64_t min_steal) const noexcept;
 
-    // Add stolen bytes
+    // Add stolen bytes (for work stealing receiver)
+    void add_bytes(std::uint64_t bytes) noexcept;
+
+    // Remove bytes (for work stealing sender)
     void steal_bytes(std::uint64_t bytes) noexcept;
 
     // Getters

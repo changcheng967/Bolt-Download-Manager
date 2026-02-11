@@ -1,0 +1,13 @@
+{
+  "default-registry": {
+    "kind": "filesystem",
+    "path": "C:/vcpkg/vcpkg-installed"
+  },
+  "registries": [
+    {
+      "kind": "filesystem",
+      "path": "C:/vcpkg",
+      "baseline": "4a9e6d8d6b26d78f4548426ddf4bf4e491712e579b"
+    }
+  ]
+}

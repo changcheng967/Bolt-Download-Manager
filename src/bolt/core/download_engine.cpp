@@ -268,12 +268,13 @@ void DownloadEngine::attempt_work_stealing() noexcept {
         if (req_progress.speed_bps < 100'000) { // < 100 KB/s
             auto steal_result = find_steal_target(segments_, requester->id(), 1'000'000);
             if (steal_result) {
-                auto [target_id, bytes] = *steal_result;
+                auto target_id = steal_result->first;
+                auto bytes = steal_result->second;
                 // Transfer bytes from target to requester
                 for (auto& target : segments_) {
                     if (target->id() == target_id) {
                         target->steal_bytes(bytes);
-                        requester->steal_bytes(-static_cast<std::int64_t>(bytes)); // Add to requester
+                        requester->add_bytes(bytes); // Add stolen bytes to requester
                         break;
                     }
                 }

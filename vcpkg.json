@@ -1,5 +1,3 @@
-// Copyright (c) 2026 changcheng967. All rights reserved.
-
 {
   "name": "boltdm",
   "version-string": "0.1.0",
@@ -11,7 +9,8 @@
     "qt6-svg",
     "nlohmann-json",
     "spdlog",
-    "openssl"
+    "openssl",
+    "catch2"
   ],
-  "builtin-baseline": "2025-01-11"
+  "builtin-baseline": "4a9e6d8d6b26d78f4548426ddf4bf4e491712e579b"
 }

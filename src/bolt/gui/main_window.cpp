@@ -28,6 +28,8 @@
 #include <QAction>
 #include <QPainter>
 #include <QStyleFactory>
+#include <QDir>
+#include <QTabWidget>
 
 namespace bolt::gui {
 

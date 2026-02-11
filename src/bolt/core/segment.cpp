@@ -157,6 +157,11 @@ void Segment::steal_bytes(std::uint64_t bytes) noexcept {
     // Note: file_offset stays the same, we just reduce HTTP range
 }
 
+void Segment::add_bytes(std::uint64_t bytes) noexcept {
+    size_ += bytes;
+    // Note: file_offset stays the same, we just increase HTTP range
+}
+
 std::uint64_t Segment::remaining() const noexcept {
     if (progress_.downloaded_bytes >= size_) return 0;
     return size_ - progress_.downloaded_bytes;

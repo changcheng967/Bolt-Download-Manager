@@ -33,5 +33,6 @@ add_subdirectory(src/bolt/cli)
 add_subdirectory(src/bolt/gui)
 add_subdirectory(src/bolt/browser)
 add_subdirectory(src/bolt/media)
+add_subdirectory(tests)
 
 feature_summary(WHAT ALL)

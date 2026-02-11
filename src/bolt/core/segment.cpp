@@ -13,6 +13,18 @@ namespace {
 std::size_t write_callback(char* ptr, std::size_t size, std::size_t nmemb, void* userdata) {
     auto* seg = static_cast<Segment*>(userdata);
     std::size_t bytes = size * nmemb;
+
+    // Write data to file if file_writer is available
+    auto* writer = seg->file_writer();
+    if (writer) {
+        std::uint64_t file_offset = seg->file_offset() + seg->write_offset();
+        auto ec = writer->write(file_offset, ptr, bytes);
+        if (ec) {
+            // Write failed - return 0 to abort the download
+            return 0;
+        }
+    }
+
     seg->add_downloaded(bytes);
     return bytes;
 }
@@ -211,6 +223,7 @@ double Segment::percent() const noexcept {
 void Segment::add_downloaded(std::uint64_t bytes) noexcept {
     std::unique_lock<std::mutex> lk = lock();
     progress_.downloaded_bytes += bytes;
+    write_offset_ += bytes;
     progress_.last_update = std::chrono::steady_clock::now();
 
     // Calculate instantaneous speed

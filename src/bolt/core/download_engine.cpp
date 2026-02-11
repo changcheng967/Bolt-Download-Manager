@@ -73,6 +73,14 @@ std::error_code DownloadEngine::prepare() noexcept {
     }
 
     seg_calculator_ = std::make_unique<SegmentCalculator>(file_size_);
+
+    // Open output file for writing
+    auto open_result = file_writer_.open(output_path_, file_size_);
+    if (open_result) {
+        state_.store(DownloadState::failed, std::memory_order_release);
+        return open_result;
+    }
+
     create_segments(*bandwidth);
 
     progress_.total_bytes = file_size_;
@@ -87,8 +95,9 @@ void DownloadEngine::create_segments(std::uint64_t bandwidth_bps) noexcept {
 
     if (!supports_ranges_ || file_size_ < MIN_SEGMENT_SIZE) {
         // Single segment for servers that don't support range requests
-        segments_.push_back(std::make_unique<Segment>(
-            0, url_, 0, file_size_, 0));
+        auto seg = std::make_unique<Segment>(0, url_, 0, file_size_, 0);
+        seg->file_writer(&file_writer_);
+        segments_.push_back(std::move(seg));
         return;
     }
 
@@ -103,8 +112,9 @@ void DownloadEngine::create_segments(std::uint64_t bandwidth_bps) noexcept {
     std::uint32_t id = 0;
     while (offset < file_size_) {
         std::uint64_t this_size = std::min(seg_size, file_size_ - offset);
-        segments_.push_back(std::make_unique<Segment>(
-            id++, url_, offset, this_size, file_offset));
+        auto seg = std::make_unique<Segment>(id++, url_, offset, this_size, file_offset);
+        seg->file_writer(&file_writer_);
+        segments_.push_back(std::move(seg));
         offset += this_size;
         file_offset += this_size;
     }
@@ -133,7 +143,7 @@ std::error_code DownloadEngine::start() noexcept {
 }
 
 void DownloadEngine::pause() noexcept {
-    auto current = state().load(std::memory_order_acquire);
+    auto current = state_.load(std::memory_order_acquire);
     if (current == DownloadState::downloading) {
         state_.store(DownloadState::paused, std::memory_order_release);
         download_thread_.request_stop();
@@ -331,6 +341,14 @@ void DownloadEngine::reset() noexcept {
     progress_ = {};
     total_downloaded_.store(0, std::memory_order_release);
     state_.store(DownloadState::idle, std::memory_order_release);
+}
+
+void DownloadEngine::stop_download() noexcept {
+    if (download_thread_.joinable()) {
+        download_thread_.request_stop();
+        download_thread_.join();
+    }
+    state_.store(DownloadState::paused, std::memory_order_release);
 }
 
 //=============================================================================

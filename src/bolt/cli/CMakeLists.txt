@@ -6,18 +6,16 @@ target_sources(boltdm PRIVATE
     main.cpp
     commands.cpp
     progress_bar.cpp
-    compat.hpp
 )
 
 target_include_directories(boltdm PRIVATE
     ${CMAKE_SOURCE_DIR}/../include
+    ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 target_link_libraries(boltdm PRIVATE
     bolt_core
     bolt_disk
-    spdlog::spdlog
-    CURL::libcurl
 )
 
 # Optional nlohmann_json

@@ -1,13 +1,24 @@
 // Copyright (c) 2026 changcheng967. All rights reserved.
 
 #include <bolt/cli/commands.hpp>
-#include <bolt/cli/compat.hpp>
+#include "compat.hpp"
+#include <bolt/cli/progress_bar.hpp>
+#include <bolt/core/download_engine.hpp>
+#include <bolt/core/error.hpp>
+#include <bolt/core/http_session.hpp>
 #include <bolt/version.hpp>
 #include <iostream>
 #include <algorithm>
+#include <memory>
+#include <expected>
+#include <chrono>
+#include <thread>
 
 using namespace bolt::cli;
 using namespace bolt::compat;  // For println, format
+using namespace bolt::core;
+
+namespace chrono = std::chrono;
 
 namespace {
 
@@ -84,17 +95,17 @@ CliResult download(const std::string& url,
 
     std::unique_ptr<DownloadEngine> engine = std::make_unique<DownloadEngine>();
 
-    if (verbose) compat::println(std::cout, "Setting URL: ", url);
+    if (verbose) println(std::cout, "Setting URL: ", url);
 
     auto result = engine->set_url(url);
     if (!result) {
-        compat::println(std::cerr, "Error: Invalid URL: ", result.error().message());
+        println(std::cerr, "Error: Invalid URL: ", result.error());
         return std::unexpected(result.error());
     }
 
     if (!output.empty()) {
         engine->output_path(output);
-        if (verbose) compat::println(std::cout, "Output path: ", output);
+        if (verbose) println(std::cout, "Output path: ", output);
     }
 
     // Configure
@@ -118,21 +129,21 @@ CliResult download(const std::string& url,
 
             if (verbose) {
                 auto progress = engine->progress();
-                compat::println(std::cout,
+                println(std::cout,
                     "Active: ", progress.active_segments,
                     " Completed: ", progress.completed_segments,
-                    " Speed: ", compat::format(progress.speed_bps));
+                    " Speed: ", format(progress.speed_bps));
             }
         });
     }
 
-    if (verbose) compat::println(std::cout, "Starting download...");
+    if (verbose) println(std::cout, "Starting download...");
 
     auto start_result = engine->start();
     if (start_result) {
-        compat::println(std::cerr, "Error: Failed to start download: ", start_result.message());
+        println(std::cerr, "Error: Failed to start download: ", start_result);
         DownloadEngine::global_cleanup();
-        return std::unexpected(start_result.error());
+        return std::unexpected(start_result);
     }
 
     // Wait for completion
@@ -140,22 +151,22 @@ CliResult download(const std::string& url,
         auto state = engine->state();
         if (state == DownloadState::completed) {
             if (!quiet) bar.finish();
-            if (verbose) compat::println(std::cout, "Download completed!");
+            if (verbose) println(std::cout, "Download completed!");
             break;
         }
         if (state == DownloadState::failed) {
             if (!quiet) bar.clear();
-            compat::println(std::cerr, "Error: Download failed");
+            println(std::cerr, "Error: Download failed");
             DownloadEngine::global_cleanup();
             return std::unexpected(make_error_code(DownloadErrc::network_error));
         }
         if (state == DownloadState::cancelled) {
             if (!quiet) bar.clear();
-            compat::println(std::cerr, "Download cancelled");
+            println(std::cerr, "Download cancelled");
             DownloadEngine::global_cleanup();
             return 1;
         }
-        std::this_thread::sleep_for(100ms);
+        std::this_thread::sleep_for(chrono::milliseconds(100));
     }
 
     DownloadEngine::global_cleanup();
@@ -171,15 +182,15 @@ CliResult info(const std::string& url) noexcept {
     DownloadEngine::global_cleanup();
 
     if (!response) {
-        compat::println(std::cerr, "Error: ", response.error().message());
+        println(std::cerr, "Error: ", response.error());
         return std::unexpected(response.error());
     }
 
-    compat::println("URL: ", url);
-    compat::println("Status: ", response->status_code);
-    compat::println("Content-Type: ", response->content_type);
-    compat::println("Content-Length: ", compat::format(response->content_length));
-    compat::println("Accepts-Ranges: ", response->accepts_ranges ? "yes" : "no");
+    println("URL: ", url);
+    println("Status: ", response->status_code);
+    println("Content-Type: ", response->content_type);
+    println("Content-Length: ", format(response->content_length));
+    println("Accepts-Ranges: ", response->accepts_ranges ? "yes" : "no");
 
     return 0;
 }

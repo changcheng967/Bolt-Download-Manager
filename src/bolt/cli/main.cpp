@@ -24,8 +24,8 @@ int main(int argc, char* argv[]) {
 
     // Need at least one URL
     if (args.urls.empty()) {
-        std::println(stderr, "Error: No URL specified");
-        std::println("Use -h for help");
+        std::cerr << "Error: No URL specified" << std::endl;
+        std::cout << "Use -h for help" << std::endl;
         return 1;
     }
 

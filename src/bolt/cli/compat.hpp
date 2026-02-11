@@ -22,8 +22,14 @@ inline std::string format(Args&&... args) {
 
 // Simple println using std::cout
 template<typename... Args>
+inline void println(Args&&... args) {
+    (std::cout << ... << args) << std::endl;
+}
+
+// Simple println to specific stream
+template<typename... Args>
 inline void println(std::ostream& os, Args&&... args) {
-    std::cout << ... << std::endl;
+    (os << ... << args) << std::endl;
 }
 
 } // namespace bolt::compat

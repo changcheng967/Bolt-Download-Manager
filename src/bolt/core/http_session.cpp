@@ -381,4 +381,16 @@ std::string HttpSession::parse_content_disposition(std::string_view content_disp
     return {};
 }
 
+//=============================================================================
+// Global CURL initialization
+//=============================================================================
+
+void global_init() noexcept {
+    curl_global_init(CURL_GLOBAL_DEFAULT);
+}
+
+void global_cleanup() noexcept {
+    curl_global_cleanup();
+}
+
 } // namespace bolt::core

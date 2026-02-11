@@ -57,8 +57,8 @@ std::expected<DownloadRequest, std::error_code> parse_request(const nlohmann::js
 
 int NativeHost::run() noexcept {
     // Set stdin/stdout to binary mode
-    _setmode(_fileno(stdin), _O_BINARY);
-    _setmode(_fileno(stdout), _O_BINARY);
+    _setmode(_fileno(stdin), _O_U16TEXT);
+    _setmode(_fileno(stdout), _O_U16TEXT);
 
     DownloadEngine::global_init();
 

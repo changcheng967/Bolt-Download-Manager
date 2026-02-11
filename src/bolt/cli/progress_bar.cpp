@@ -135,9 +135,9 @@ std::string ProgressBar::render_bar(double percent) const noexcept {
     for (int i = 0; i < filled; ++i) {
         bar += '=';
     }
-    bar.append(1, '>');
+    bar += ">";
     for (int i = 0; i < empty; ++i) {
-        bar.append(' ');
+        bar += ' ';
     }
     bar += "]";
     return bar;

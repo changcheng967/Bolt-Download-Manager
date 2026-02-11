@@ -126,10 +126,13 @@ std::size_t write_callback(char* ptr, std::size_t size, std::size_t nitems, void
 HttpResponse HttpSession::parse_response(void* curl) noexcept {
     HttpResponse response{};
 
-    // Get content length
-    double cl = 0;
-    if (curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl) == CURLE_OK) {
+    // Get content length (use newer _T variant to avoid deprecated warning)
+    curl_off_t cl = 0;
+    if (curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &cl) == CURLE_OK && cl > 0) {
         response.content_length = static_cast<std::uint64_t>(cl);
+    } else {
+        // Content length unknown - server may use chunked encoding
+        response.content_length = 0;
     }
 
     // Get content type
@@ -197,6 +200,8 @@ HttpSession::head(const std::string& url) noexcept {
         return std::unexpected(make_error_code(DownloadErrc::network_error));
     }
 
+    HttpResponse response{};
+
     // Set URL
     curl_easy_setopt(curl.ptr, CURLOPT_URL, url.c_str());
 
@@ -207,6 +212,10 @@ HttpSession::head(const std::string& url) noexcept {
     curl_easy_setopt(curl.ptr, CURLOPT_CONNECTTIMEOUT, static_cast<long>(CONNECTION_TIMEOUT_SEC));
     curl_easy_setopt(curl.ptr, CURLOPT_SSL_VERIFYPEER, 1L);
     curl_easy_setopt(curl.ptr, CURLOPT_SSL_VERIFYHOST, 2L);
+
+    // Set header callback BEFORE performing request
+    curl_easy_setopt(curl.ptr, CURLOPT_HEADERFUNCTION, reinterpret_cast<void*>(header_callback));
+    curl_easy_setopt(curl.ptr, CURLOPT_HEADERDATA, &response.headers);
 
     // Perform request
     CURLcode result = curl_easy_perform(curl.ptr);
@@ -229,7 +238,31 @@ HttpSession::head(const std::string& url) noexcept {
         }
     }
 
-    auto response = parse_response(curl.ptr);
+    // Get content length from headers or curl info
+    curl_off_t cl = 0;
+    if (curl_easy_getinfo(curl.ptr, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &cl) == CURLE_OK && cl > 0) {
+        response.content_length = static_cast<std::uint64_t>(cl);
+    } else {
+        // Try to get from Content-Length header
+        auto it = response.headers.find("content-length");
+        if (it != response.headers.end() && !it->second.empty()) {
+            try {
+                response.content_length = std::stoull(it->second);
+            } catch (...) {
+                response.content_length = 0;
+            }
+        }
+    }
+
+    // Get content type
+    char* ct = nullptr;
+    if (curl_easy_getinfo(curl.ptr, CURLINFO_CONTENT_TYPE, &ct) == CURLE_OK && ct) {
+        response.content_type = ct;
+    }
+
+    long http_code = 0;
+    curl_easy_getinfo(curl.ptr, CURLINFO_RESPONSE_CODE, &http_code);
+    response.status_code = static_cast<std::int32_t>(http_code);
 
     // Set headers from response
     if (!ec) {

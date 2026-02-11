@@ -21,8 +21,8 @@ constexpr std::uint32_t RETRY_COUNT = 3;
 constexpr std::chrono::milliseconds BANDWIDTH_SAMPLE_INTERVAL{100};
 constexpr std::chrono::milliseconds PROBE_DURATION{2000};
 
-constexpr std::size_t WRITE_BUFFER_SIZE = 256'1024;           // 256 KB
-constexpr std::size_t READ_BUFFER_SIZE = 256'1024;            // 256 KB
+constexpr std::size_t WRITE_BUFFER_SIZE = 256 * 1024;           // 256 KB
+constexpr std::size_t READ_BUFFER_SIZE = 256 * 1024;            // 256 KB
 
 constexpr std::uint32_t MAX_REDIRECTS = 10;
 constexpr bool FOLLOW_REDIRECTS = true;

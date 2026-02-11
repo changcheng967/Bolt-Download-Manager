@@ -385,11 +385,11 @@ std::string HttpSession::parse_content_disposition(std::string_view content_disp
 // Global CURL initialization
 //=============================================================================
 
-void global_init() noexcept {
+void HttpSession::global_init() noexcept {
     curl_global_init(CURL_GLOBAL_DEFAULT);
 }
 
-void global_cleanup() noexcept {
+void HttpSession::global_cleanup() noexcept {
     curl_global_cleanup();
 }
 

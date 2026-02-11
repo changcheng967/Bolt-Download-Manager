@@ -7,6 +7,7 @@
 #include <bolt/core/segment.hpp>
 #include <bolt/core/http_session.hpp>
 #include <bolt/core/bandwidth_prober.hpp>
+#include <bolt/disk/file_writer.hpp>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -75,11 +76,11 @@ public:
     explicit DownloadEngine(Url url);
     ~DownloadEngine();
 
-    // Non-copyable, movable
+    // Non-copyable, non-movable (atomic members can't be moved)
     DownloadEngine(const DownloadEngine&) = delete;
     DownloadEngine& operator=(const DownloadEngine&) = delete;
-    DownloadEngine(DownloadEngine&&) noexcept = default;
-    DownloadEngine& operator=(DownloadEngine&&) noexcept = default;
+    DownloadEngine(DownloadEngine&&) noexcept = delete;
+    DownloadEngine& operator=(DownloadEngine&&) noexcept = delete;
 
     // Set URL and start preparing download
     [[nodiscard]] std::expected<void, std::error_code> set_url(std::string_view url_str) noexcept;
@@ -151,6 +152,9 @@ private:
     // Reset for new download
     void reset() noexcept;
 
+    // Stop the download thread
+    void stop_download() noexcept;
+
     Url url_;
     std::string output_path_;
     DownloadConfig config_;
@@ -171,6 +175,7 @@ private:
 
     DownloadCallback callback_;
     HttpSession http_session_;
+    bolt::disk::FileWriter file_writer_;
 
     std::jthread download_thread_;
     mutable std::mutex mutex_;

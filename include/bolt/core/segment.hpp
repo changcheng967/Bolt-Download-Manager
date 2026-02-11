@@ -4,6 +4,7 @@
 
 #include <bolt/core/error.hpp>
 #include <bolt/core/url.hpp>
+#include <bolt/disk/file_writer.hpp>
 #include <cstdint>
 #include <atomic>
 #include <chrono>
@@ -79,6 +80,7 @@ public:
     [[nodiscard]] std::uint64_t size() const noexcept { return size_; }
     [[nodiscard]] std::uint64_t file_offset() const noexcept { return file_offset_; }
     [[nodiscard]] std::uint64_t downloaded() const noexcept { return progress_.downloaded_bytes; }
+    [[nodiscard]] std::uint64_t write_offset() const noexcept { return write_offset_; }
     [[nodiscard]] std::uint64_t remaining() const noexcept;
     [[nodiscard]] double percent() const noexcept;
 
@@ -87,6 +89,10 @@ public:
 
     // Update downloaded bytes (called by write callback)
     void add_downloaded(std::uint64_t bytes) noexcept;
+
+    // Set file writer for writing downloaded data
+    void file_writer(bolt::disk::FileWriter* writer) noexcept { file_writer_ = writer; }
+    [[nodiscard]] bolt::disk::FileWriter* file_writer() const noexcept { return file_writer_; }
 
     // Set new state
     void state(SegmentState new_state) noexcept { state_.store(new_state, std::memory_order_release); }
@@ -112,6 +118,8 @@ private:
 
     mutable std::mutex mutex_;
     void* curl_handle_{nullptr};  // CURL* handle
+    bolt::disk::FileWriter* file_writer_{nullptr};  // File writer for saving data
+    std::uint64_t write_offset_{0};  // Current write offset within this segment
 };
 
 // Work stealing between segments

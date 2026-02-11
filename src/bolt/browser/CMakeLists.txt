@@ -1,0 +1,24 @@
+# Copyright (c) 2026 changcheng967. All rights reserved.
+
+add_executable(boltdm_host)
+
+target_sources(boltdm_host PRIVATE
+    native_host.cpp
+    messaging.cpp
+)
+
+target_include_directories(boltdm_host PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(boltdm_host PRIVATE
+    bolt_core
+    nlohmann_json::nlohmann_json
+)
+
+target_compile_features(boltdm_host PRIVATE cxx_std_23)
+
+if(MSVC)
+    target_compile_definitions(boltdm_host PRIVATE _CRT_SECURE_NO_WARNINGS WIN32_LEAN_AND_MEAN NOMINMAX)
+    target_compile_options(boltdm_host PRIVATE /SUBSYSTEM:WINDOWS)
+endif()

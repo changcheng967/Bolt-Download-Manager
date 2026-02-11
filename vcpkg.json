@@ -1,0 +1,17 @@
+// Copyright (c) 2026 changcheng967. All rights reserved.
+
+{
+  "name": "boltdm",
+  "version-string": "0.1.0",
+  "dependencies": [
+    "curl",
+    "boost-asio",
+    "qt6",
+    "qt6-charts",
+    "qt6-svg",
+    "nlohmann-json",
+    "spdlog",
+    "openssl"
+  ],
+  "builtin-baseline": "2025-01-11"
+}

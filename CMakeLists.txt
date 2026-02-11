@@ -36,9 +36,9 @@ add_subdirectory(src/bolt/disk)
 add_subdirectory(src/bolt/cli)
 
 # Find optional dependencies
-find_package(spdlog REQUIRED)
-find_package(nlohmann_json 3.11 QUIET)
-find_package(Qt6 6.5 QUIET COMPONENTS Core Widgets Charts Svg Network)
+find_package(spdlog CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG QUIET)
+find_package(Qt6 6 QUIET COMPONENTS Core Widgets Charts Svg Network)
 find_package(Catch2 3 QUIET)
 
 # Browser extension native host (requires nlohmann_json)

@@ -15,7 +15,8 @@ target_include_directories(boltdm PRIVATE
 target_link_libraries(boltdm PRIVATE
     bolt_core
     bolt_disk
-    spdlog::spdlog
+    $<$<TARGET_EXISTS:spdlog::spdlog>:spdlog::spdlog>
+    $<$<NOT:$<TARGET_EXISTS:spdlog::spdlog>>:spdlog>
 )
 
 target_compile_features(boltdm PRIVATE cxx_std_23)

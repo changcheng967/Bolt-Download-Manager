@@ -4,9 +4,6 @@
   "dependencies": [
     "curl",
     "boost-asio",
-    "qt6",
-    "qt6-charts",
-    "qt6-svg",
     "nlohmann-json",
     "spdlog",
     "openssl",

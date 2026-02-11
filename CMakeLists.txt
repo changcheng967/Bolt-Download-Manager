@@ -15,21 +15,18 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR}/bin)
 
 # Windows-specific build configuration
 if(WIN32)
-    # Use MSVC by default on Windows for better C++20 support
-    # Ninja + MSVC is a better combo than clang-cl
-    include(Configuration/CMakeClAndViewSelection)
-    include(Configuration/CMakeClSettings)
-
     # Set output directories
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
     set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
     set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
-    # MSVC compilation flags
-    add_compile_options(/wd4996)  # Disable deprecated CRT warnings from curl
-    if(CMAKE_BUILD_TYPE MATCHES Release)
-        add_compile_options(/O2 /GL /Ob3 /Oi /Ot)
-        add_link_options(/LTCG /OPT:REF /OPT:ICF)
+    # Disable deprecated CRT warnings from curl
+    if(MSVC)
+        add_compile_options(/wd4996)
+        if(CMAKE_BUILD_TYPE MATCHES Release)
+            add_compile_options(/O2 /GL /Ob3 /Oi /Ot)
+            add_link_options(/LTCG /OPT:REF /OPT:ICF)
+        endif()
     endif()
 endif()
 

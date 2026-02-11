@@ -148,17 +148,16 @@ Spinner::Spinner(Style style) noexcept
     : style_(style) {}
 
 void Spinner::update() noexcept {
-    std::print("\r{} ", SPINNER_FRAMES[frame_ % 4]);
-    std::fflush(stdout);
+    std::cout << "\r" << SPINNER_FRAMES[frame_ % 4] << " " << std::flush;
     ++frame_;
 }
 
 void Spinner::finish() noexcept {
-    std::println("\r done");
+    std::cout << "\r done" << std::endl;
 }
 
 void Spinner::clear() noexcept {
-    std::print("\r     \r");
+    std::cout << "\r      \r" << std::flush;
 }
 
 } // namespace bolt::cli

@@ -10,6 +10,8 @@
 #include <expected>
 #include <map>
 #include <vector>
+#include <chrono>
+#include <functional>
 
 namespace bolt::core {
 

@@ -209,7 +209,7 @@ double Segment::percent() const noexcept {
 }
 
 void Segment::add_downloaded(std::uint64_t bytes) noexcept {
-    auto lock = lock();
+    std::unique_lock<std::mutex> lk = lock();
     progress_.downloaded_bytes += bytes;
     progress_.last_update = std::chrono::steady_clock::now();
 

@@ -21,11 +21,13 @@ constexpr std::string_view TAG_KEYS = "#EXT-X-KEY:";
 
 bool HLSParser::is_hls_url(std::string_view url) noexcept {
     // Check for .m3u8 extension or HLS query parameters
-    auto lower_url = std::string(url);
-    std::transform(lower_url.begin(), lower_url.end(), lower_url.begin(),
-                   [](unsigned char c) { return std::tolower(c); });
+    std::string lower_url;
+    lower_url.reserve(url.size());
+    for (char c : url) {
+        lower_url += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
 
-    return lower_url.find(".m3u8") != std::string_view::npos;
+    return lower_url.find(".m3u8") != std::string::npos;
 }
 
 std::expected<HLSPlaylist, std::error_code>
@@ -130,11 +132,11 @@ std::string HLSParser::resolve_url(std::string_view base, std::string_view relat
 
     if (relative.starts_with("/")) {
         // Absolute path
-        auto scheme_end = base.find("://");
+        auto scheme_end = base_str.find("://");
         if (scheme_end != std::string::npos) {
-            auto host_start = base.find('/', scheme_end + 3);
+            auto host_start = base_str.find('/', scheme_end + 3);
             if (host_start != std::string::npos) {
-                return base.substr(0, host_start) + std::string(relative);
+                return base_str.substr(0, host_start) + std::string(relative);
             }
         }
     }

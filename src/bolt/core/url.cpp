@@ -141,17 +141,17 @@ std::uint16_t Url::default_port() const noexcept {
 }
 
 std::string Url::filename() const {
-    auto path = path_;
+    std::string path = path_;  // Make a copy to avoid dangling pointer
 
     // Remove query string if present
     auto query_pos = path.find('?');
-    if (query_pos != std::string_view::npos) {
+    if (query_pos != std::string::npos) {
         path = path.substr(0, query_pos);
     }
 
     // Get filename from path
     auto last_slash = path.rfind('/');
-    if (last_slash == std::string_view::npos) {
+    if (last_slash == std::string::npos) {
         last_slash = 0;
     }
 
@@ -165,7 +165,7 @@ std::string Url::filename() const {
         return "index.html";
     }
 
-    return filename;
+    return std::string(filename);
 }
 
 } // namespace bolt::core

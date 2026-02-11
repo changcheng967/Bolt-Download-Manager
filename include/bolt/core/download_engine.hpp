@@ -15,7 +15,7 @@
 #include <atomic>
 #include <mutex>
 #include <expected>
-#include <jthread>
+#include <thread>
 #include <stop_token>
 
 namespace bolt::core {

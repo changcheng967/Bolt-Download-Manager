@@ -3,7 +3,9 @@
 #pragma once
 
 #include <string>
+#include <vector>
 #include <expected>
+#include <system_error>
 
 namespace bolt::browser {
 

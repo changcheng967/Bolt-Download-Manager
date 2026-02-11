@@ -6,6 +6,7 @@
 #include <vector>
 #include <expected>
 #include <cstdint>
+#include <system_error>
 
 namespace bolt::media {
 

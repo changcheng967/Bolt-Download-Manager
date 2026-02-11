@@ -12,6 +12,9 @@
 
 namespace bolt::disk {
 
+// Write buffer size for coalescing
+constexpr std::size_t WRITE_BUFFER_SIZE = 256 * 1024;  // 256 KB
+
 // Write operation queue entry
 struct WriteOp {
     std::uint64_t file_offset;

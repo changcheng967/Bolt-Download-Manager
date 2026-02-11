@@ -141,7 +141,7 @@ std::uint16_t Url::default_port() const noexcept {
 }
 
 std::string Url::filename() const {
-    std::string path = path_;  // Make a copy to avoid dangling pointer
+    std::string path(path_);  // Make a copy to avoid dangling pointer
 
     // Remove query string if present
     auto query_pos = path.find('?');

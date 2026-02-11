@@ -1,5 +1,10 @@
 # Copyright (c) 2026 changcheng967. All rights reserved.
 
+# nlohmann_json should already be found by parent CMakeLists
+if(NOT nlohmann_json_FOUND)
+    message(FATAL_ERROR "nlohmann_json is required for browser native host but was not found")
+endif()
+
 add_executable(boltdm_host)
 
 target_sources(boltdm_host PRIVATE

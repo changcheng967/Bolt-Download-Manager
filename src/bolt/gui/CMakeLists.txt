@@ -1,7 +1,9 @@
 # Copyright (c) 2026 changcheng967. All rights reserved.
 
-# Find Qt packages
-find_package(Qt6 REQUIRED COMPONENTS Core Widgets Charts Svg Network)
+# Qt6 should already be found by parent CMakeLists
+if(NOT Qt6_FOUND)
+    message(FATAL_ERROR "Qt6 is required for GUI but was not found")
+endif()
 
 # Generate Qt MOC files
 set(CMAKE_AUTOMOC ON)

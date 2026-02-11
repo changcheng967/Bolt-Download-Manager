@@ -1,5 +1,10 @@
 # Copyright (c) 2026 changcheng967. All rights reserved.
 
+# Catch2 should already be found by parent CMakeLists
+if(NOT Catch2_FOUND)
+    message(FATAL_ERROR "Catch2 is required for tests but was not found")
+endif()
+
 add_executable(bolt_tests)
 
 target_sources(bolt_tests PRIVATE

@@ -37,10 +37,31 @@ endif()
 add_subdirectory(src/bolt/core)
 add_subdirectory(src/bolt/disk)
 add_subdirectory(src/bolt/cli)
-# GUI requires Qt6 - skip until installed
-# add_subdirectory(src/bolt/gui)
-# add_subdirectory(src/bolt/browser)
-# add_subdirectory(src/bolt/media)
-# add_subdirectory(tests)
+
+# Find optional dependencies
+find_package(nlohmann_json 3.11 QUIET)
+find_package(Qt6 6.5 QUIET COMPONENTS Core Widgets Charts Svg Network)
+find_package(Catch2 3 QUIET)
+
+# Browser extension native host (requires nlohmann_json)
+if(nlohmann_json_FOUND)
+    add_subdirectory(src/bolt/browser)
+endif()
+
+# Media grabber (requires nlohmann_json)
+if(nlohmann_json_FOUND)
+    add_subdirectory(src/bolt/media)
+endif()
+
+# GUI application (requires Qt6)
+if(Qt6_FOUND)
+    add_subdirectory(src/bolt/gui)
+endif()
+
+# Unit tests (requires Catch2)
+if(Catch2_FOUND)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
 
 feature_summary(WHAT ALL)

@@ -45,8 +45,8 @@ public:
     // Non-copyable, movable
     Segment(const Segment&) = delete;
     Segment& operator=(const Segment&) = delete;
-    Segment(Segment&&) noexcept = default;
-    Segment& operator=(Segment&&) noexcept = default;
+    Segment(Segment&& other) noexcept;
+    Segment& operator=(Segment&& other) noexcept;
 
     // Start downloading this segment
     [[nodiscard]] std::error_code start() noexcept;

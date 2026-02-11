@@ -21,10 +21,10 @@ std::expected<Url, std::error_code> Url::parse(std::string_view url_str) noexcep
                    url.scheme_.begin(),
                    [](unsigned char c) { return std::tolower(c); });
 
-    auto path_start = scheme_end + 3; // Skip "://"
+    auto rest_start = scheme_end + 3; // Skip "://"
 
     // Parse host and optional port
-    auto path_start = url_str.find('/', path_start);
+    auto path_start = url_str.find('/', rest_start);
     if (path_start == std::string_view::npos) {
         path_start = url_str.length();
     }
@@ -50,13 +50,13 @@ std::expected<Url, std::error_code> Url::parse(std::string_view url_str) noexcep
     // Extract host (before port or path)
     if (url.host_.empty()) {
         if (colon_pos != std::string_view::npos && colon_pos < host_end) {
-            url.host_ = url_str.substr(scheme_end + 3, colon_pos - scheme_end - 3);
+            url.host_ = url_str.substr(rest_start, colon_pos - rest_start);
             auto port_end = std::min({url_str.find('/', colon_pos), url_str.find('?', colon_pos), host_end});
             url.port_ = url_str.substr(colon_pos + 1, port_end - colon_pos - 1);
         }
 
         if (url.host_.empty()) {
-            auto bracket_end = url_str.find(']', scheme_end + 3);
+            auto bracket_end = url_str.find(']', rest_start);
             if (bracket_end != std::string_view::npos && bracket_end < host_end) {
                 url.host_ = url_str.substr(bracket_end + 1, host_end - bracket_end - 1);
             }

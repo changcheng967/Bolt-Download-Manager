@@ -2,6 +2,7 @@
 
 #include <bolt/disk/async_file.hpp>
 #include <bolt/core/config.hpp>
+#include <windows.h>
 
 namespace bolt::disk {
 

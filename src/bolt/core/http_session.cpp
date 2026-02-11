@@ -4,7 +4,7 @@
 #include <bolt/core/config.hpp>
 #include <curl/curl.h>
 #include <algorithm>
-#include <format>
+#include <string>
 
 // Windows headers
 #include <windows.h>
@@ -252,7 +252,7 @@ HttpSession::get(const std::string& url,
 
     // Range header
     if (size > 0) {
-        std::string range = std::format("{}-{}", offset, offset + size - 1);
+        std::string range = std::to_string(offset) + "-" + std::to_string(offset + size - 1);
         curl_easy_setopt(curl.ptr, CURLOPT_RANGE, range.c_str());
     }
 

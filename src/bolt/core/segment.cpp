@@ -38,6 +38,42 @@ Segment::Segment(std::uint32_t id, Url url,
     , file_offset_(file_offset)
     , progress_{0, size, 0, 0, std::chrono::steady_clock::now(), std::chrono::steady_clock::now()} {}
 
+Segment::Segment(Segment&& other) noexcept
+    : id_(other.id_)
+    , url_(std::move(other.url_))
+    , offset_(other.offset_)
+    , size_(other.size_)
+    , file_offset_(other.file_offset_)
+    , state_(other.state_.load())
+    , progress_(other.progress_)
+    , error_(other.error_)
+    , curl_handle_(other.curl_handle_) {
+    other.curl_handle_ = nullptr;
+    other.state_.store(SegmentState::pending, std::memory_order_release);
+}
+
+Segment& Segment::operator=(Segment&& other) noexcept {
+    if (this != &other) {
+        if (curl_handle_) {
+            curl_easy_cleanup(static_cast<CURL*>(curl_handle_));
+        }
+
+        id_ = other.id_;
+        url_ = std::move(other.url_);
+        offset_ = other.offset_;
+        size_ = other.size_;
+        file_offset_ = other.file_offset_;
+        state_.store(other.state_.load());
+        progress_ = other.progress_;
+        error_ = other.error_;
+        curl_handle_ = other.curl_handle_;
+
+        other.curl_handle_ = nullptr;
+        other.state_.store(SegmentState::pending, std::memory_order_release);
+    }
+    return *this;
+}
+
 std::error_code Segment::start() noexcept {
     auto expected = SegmentState::pending;
     if (!state_.compare_exchange_strong(expected, SegmentState::connecting,
@@ -61,7 +97,7 @@ std::error_code Segment::start() noexcept {
     curl_easy_setopt(curl, CURLOPT_URL, url_.full().c_str());
 
     // Set range header
-    std::string range = std::format("{}-{}", offset_, offset_ + size_ - 1);
+    std::string range = std::to_string(offset_) + "-" + std::to_string(offset_ + size_ - 1);
     curl_easy_setopt(curl, CURLOPT_RANGE, range.c_str());
 
     // Set callbacks

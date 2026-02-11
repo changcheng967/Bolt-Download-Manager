@@ -73,8 +73,11 @@ private:
     // Parse response headers
     static HttpResponse parse_response(void* curl) noexcept;
 
-    // Extract filename from Content-Disposition header
-    static std::string extract_filename(std::string_view content_disposition) noexcept;
+    // Extract filename from headers
+    static std::string extract_filename(const std::map<std::string, std::string>& headers) noexcept;
+
+    // Parse Content-Disposition header value
+    static std::string parse_content_disposition(std::string_view content_disposition) noexcept;
 };
 
 } // namespace bolt::core

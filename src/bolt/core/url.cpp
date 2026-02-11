@@ -17,9 +17,13 @@ std::expected<Url, std::error_code> Url::parse(std::string_view url_str) noexcep
     }
 
     url.scheme_ = url_str.substr(0, scheme_end);
-    std::transform(url.scheme_.begin(), url.scheme_.end(),
-                   url.scheme_.begin(),
-                   [](unsigned char c) { return std::tolower(c); });
+    // Convert scheme to lowercase
+    std::string lower_scheme;
+    lower_scheme.reserve(url.scheme_.size());
+    for (char c : url.scheme_) {
+        lower_scheme += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    url.scheme_ = lower_scheme;
 
     auto rest_start = scheme_end + 3; // Skip "://"
 
@@ -29,8 +33,8 @@ std::expected<Url, std::error_code> Url::parse(std::string_view url_str) noexcep
         path_start = url_str.length();
     }
 
-    auto host_end = std::min(path_start, url_str.find('?', path_start));
-    auto at_pos = url_str.find('@', scheme_end + 3);
+    auto host_end = std::min(path_start, url_str.find('?', rest_start));
+    auto at_pos = url_str.find('@', rest_start);
     auto colon_pos = url_str.rfind(':', host_end);
 
     std::size_t ipv6_end = 0;
@@ -64,16 +68,21 @@ std::expected<Url, std::error_code> Url::parse(std::string_view url_str) noexcep
     }
 
     // Remaining is path
-    url.path_ = (path_start < url_str.length())
-        ? std::string(url_str.substr(path_start))
-        : "/";
+    if (path_start < url_str.length()) {
+        url.path_ = std::string(url_str.substr(path_start));
+    } else {
+        url.path_ = "/";
+    }
 
     // Parse query
     auto query_pos = url_str.find('?', path_start);
     if (query_pos != std::string_view::npos && query_pos < url_str.length()) {
-        auto frag_pos = url_str.find('#', query_pos);
-        url.query_ = url_str.substr(query_pos + 1,
-            (frag_pos != std::string_view::npos ? frag_pos - query_pos - 1 : url_str.length() - query_pos - 1);
+        auto frag_pos = url_str.find('#', query_pos + 1);
+        if (frag_pos != std::string_view::npos) {
+            url.query_ = url_str.substr(query_pos + 1, frag_pos - query_pos - 1);
+        } else {
+            url.query_ = url_str.substr(query_pos + 1);
+        }
     }
 
     // Parse fragment

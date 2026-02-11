@@ -24,5 +24,5 @@ target_compile_features(boltdm_host PRIVATE cxx_std_23)
 
 if(MSVC)
     target_compile_definitions(boltdm_host PRIVATE _CRT_SECURE_NO_WARNINGS WIN32_LEAN_AND_MEAN NOMINMAX)
-    target_compile_options(boltdm_host PRIVATE /SUBSYSTEM:WINDOWS)
+    target_link_options(boltdm_host PRIVATE /SUBSYSTEM:WINDOWS)
 endif()

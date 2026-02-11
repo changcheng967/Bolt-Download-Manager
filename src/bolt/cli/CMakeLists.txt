@@ -24,4 +24,17 @@ if(MSVC)
     target_compile_definitions(boltdm PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()
 
+# Get list of DLLs to copy from vcpkg bin
+file(GLOB "${VCPKG_INSTALLED_DIR}/x64-windows/bin/*.dll" DLL_FILES)
+
+# Create custom command to copy each DLL
+foreach(DLL_FILE ${DLL_FILES})
+    get_filename_component(${DLL_FILE} NAME EXT)
+    get_filename_component(${DLL_FILE} NAME WE)
+
+    add_custom_command(copy_${WE} ALL
+        COMMAND ${CMAKE_COMMAND} -E copy "${DLL_FILE}" "${CMAKE_CURRENT_BINARY_DIR}/" || exit 0
+        COMMENT "Copy ${WE} to output directory"
+    endforeach()
+
 feature_summary(WHAT ALL)

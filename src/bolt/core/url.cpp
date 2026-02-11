@@ -10,8 +10,6 @@ std::expected<Url, std::error_code> Url::parse(std::string_view url_str) noexcep
     Url url;
     url.str_ = url_str;
 
-    std::size_t pos = 0;
-
     // Parse scheme
     auto scheme_end = url_str.find("://");
     if (scheme_end == std::string_view::npos) {
@@ -20,73 +18,68 @@ std::expected<Url, std::error_code> Url::parse(std::string_view url_str) noexcep
 
     url.scheme_ = url_str.substr(0, scheme_end);
     std::transform(url.scheme_.begin(), url.scheme_.end(),
-                   url.scheme_.begin(), [](unsigned char c) { return std::tolower(c); });
+                   url.scheme_.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
 
-    pos = scheme_end + 3; // Skip "://"
+    auto path_start = scheme_end + 3; // Skip "://"
 
     // Parse host and optional port
-    auto path_start = url_str.find('/', pos);
-    auto query_start = url_str.find('?', pos);
-    auto frag_start = url_str.find('#', pos);
-
-    std::size_t host_end = path_start;
-    if (query_start != std::string_view::npos && (host_end == std::string_view::npos || query_start < host_end)) {
-        host_end = query_start;
-    }
-    if (frag_start != std::string_view::npos && (host_end == std::string_view::npos || frag_start < host_end)) {
-        host_end = frag_start;
-    }
-    if (host_end == std::string_view::npos) {
-        host_end = url_str.length();
+    auto path_start = url_str.find('/', path_start);
+    if (path_start == std::string_view::npos) {
+        path_start = url_str.length();
     }
 
+    auto host_end = std::min(path_start, url_str.find('?', path_start));
+    auto at_pos = url_str.find('@', scheme_end + 3);
     auto colon_pos = url_str.rfind(':', host_end);
-    if (colon_pos != std::string_view::npos && colon_pos > pos) {
-        // Check if it's an IPv6 address
-        if (url_str[pos] == '[') {
-            auto closing_bracket = url_str.find(']', pos);
-            if (closing_bracket != std::string_view::npos && closing_bracket < colon_pos) {
-                url.host_ = url_str.substr(pos, closing_bracket - pos + 1);
-                url.port_ = url_str.substr(colon_pos + 1, host_end - colon_pos - 1);
+
+    std::size_t ipv6_end = 0;
+
+    // Check for IPv6 address [::1]
+    if (at_pos != std::string_view::npos && at_pos < host_end) {
+        if (colon_pos > at_pos) {
+            // Port is after @, like user@host:port
+            url.host_ = url_str.substr(at_pos + 1, colon_pos - at_pos - 1);
+            auto bracket_pos = url_str.find(']', at_pos);
+            if (bracket_pos != std::string_view::npos) {
+                url.host_ = url_str.substr(at_pos + 1, bracket_pos - at_pos);
             }
-        } else {
-            url.host_ = url_str.substr(pos, colon_pos - pos);
-            url.port_ = url_str.substr(colon_pos + 1, host_end - colon_pos - 1);
         }
-    } else {
-        url.host_ = url_str.substr(pos, host_end - pos);
     }
 
-    pos = host_end;
+    // Extract host (before port or path)
+    if (url.host_.empty()) {
+        if (colon_pos != std::string_view::npos && colon_pos < host_end) {
+            url.host_ = url_str.substr(scheme_end + 3, colon_pos - scheme_end - 3);
+            auto port_end = std::min({url_str.find('/', colon_pos), url_str.find('?', colon_pos), host_end});
+            url.port_ = url_str.substr(colon_pos + 1, port_end - colon_pos - 1);
+        }
 
-    // Parse path
-    if (pos < url_str.length() && url_str[pos] == '/') {
-        std::size_t path_end = url_str.length();
-        if (query_start != std::string_view::npos && query_start < path_end) {
-            path_end = query_start;
+        if (url.host_.empty()) {
+            auto bracket_end = url_str.find(']', scheme_end + 3);
+            if (bracket_end != std::string_view::npos && bracket_end < host_end) {
+                url.host_ = url_str.substr(bracket_end + 1, host_end - bracket_end - 1);
+            }
         }
-        if (frag_start != std::string_view::npos && frag_start < path_end) {
-            path_end = frag_start;
-        }
-        url.path_ = url_str.substr(pos, path_end - pos);
-        pos = path_end;
-    } else {
-        url.path_ = "/";
     }
+
+    // Remaining is path
+    url.path_ = (path_start < url_str.length())
+        ? std::string(url_str.substr(path_start))
+        : "/";
 
     // Parse query
-    if (pos < url_str.length() && url_str[pos] == '?') {
-        std::size_t query_end = url_str.length();
-        if (frag_start != std::string_view::npos && frag_start < query_end) {
-            query_end = frag_start;
-        }
-        url.query_ = url_str.substr(pos + 1, query_end - pos - 1);
-        pos = query_end;
+    auto query_pos = url_str.find('?', path_start);
+    if (query_pos != std::string_view::npos && query_pos < url_str.length()) {
+        auto frag_pos = url_str.find('#', query_pos);
+        url.query_ = url_str.substr(query_pos + 1,
+            (frag_pos != std::string_view::npos ? frag_pos - query_pos - 1 : url_str.length() - query_pos - 1);
     }
 
     // Parse fragment
-    if (pos < url_str.length() && url_str[pos] == '#') {
-        url.fragment_ = url_str.substr(pos + 1);
+    auto frag_pos = url_str.find('#', path_start);
+    if (frag_pos != std::string_view::npos && frag_pos < url_str.length()) {
+        url.fragment_ = url_str.substr(frag_pos + 1);
     }
 
     return url;
@@ -94,7 +87,8 @@ std::expected<Url, std::error_code> Url::parse(std::string_view url_str) noexcep
 
 std::string Url::full() const {
     std::string result;
-    result.reserve(str_.size());
+    result.reserve(str_.size() + 10);
+
     result += scheme_;
     result += "://";
     result += host_;
@@ -111,12 +105,14 @@ std::string Url::full() const {
         result += '#';
         result += fragment_;
     }
+
     return result;
 }
 
 std::string Url::base() const {
     std::string result;
-    result.reserve(scheme_.size() + host_.size() + port_.size() + 4);
+    result.reserve(str_.size() + 10);
+
     result += scheme_;
     result += "://";
     result += host_;
@@ -124,6 +120,7 @@ std::string Url::base() const {
         result += ':';
         result += port_;
     }
+
     return result;
 }
 
@@ -135,23 +132,31 @@ std::uint16_t Url::default_port() const noexcept {
 }
 
 std::string Url::filename() const {
-    if (path_.empty() || path_ == "/") return "index.html";
+    auto path = path_;
 
-    auto last_slash = path_.rfind('/');
-    auto start = (last_slash == std::string_view::npos) ? 0 : last_slash + 1;
+    // Remove query string if present
+    auto query_pos = path.find('?');
+    if (query_pos != std::string_view::npos) {
+        path = path.substr(0, query_pos);
+    }
 
-    auto query_pos = path_.find('?', start);
-    auto frag_pos = path_.find('#', start);
-    auto end = path_.length();
+    // Get filename from path
+    auto last_slash = path.rfind('/');
+    if (last_slash == std::string_view::npos) {
+        last_slash = 0;
+    }
 
-    if (query_pos != std::string_view::npos && query_pos < end) end = query_pos;
-    if (frag_pos != std::string_view::npos && frag_pos < end) end = frag_pos;
+    if (last_slash == 0) {
+        return "index.html";
+    }
 
-    auto filename = path_.substr(start, end - start);
+    auto filename = path.substr(last_slash + 1);
 
-    if (filename.empty() || filename.ends_with('/')) return "index.html";
+    if (filename.empty() || filename == "/") {
+        return "index.html";
+    }
 
-    return std::string(filename);
+    return filename;
 }
 
 } // namespace bolt::core

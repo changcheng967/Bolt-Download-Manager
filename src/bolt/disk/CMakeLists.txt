@@ -12,6 +12,7 @@ target_include_directories(bolt_disk PUBLIC
     ${CMAKE_SOURCE_DIR}/include
 )
 
+# Link to bolt_core
 target_link_libraries(bolt_disk PUBLIC
     bolt_core
 )
@@ -20,4 +21,5 @@ target_compile_features(bolt_disk PUBLIC cxx_std_23)
 
 if(MSVC)
     target_compile_definitions(bolt_disk PRIVATE _CRT_SECURE_NO_WARNINGS)
+    target_compile_options(bolt_disk PRIVATE /wd4996)
 endif()

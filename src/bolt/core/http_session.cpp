@@ -4,83 +4,172 @@
 #include <bolt/core/config.hpp>
 #include <curl/curl.h>
 #include <algorithm>
-#include <regex>
+#include <format>
+
+// Windows headers
+#include <windows.h>
 
 namespace bolt::core {
 
 namespace {
 
-// RAII initializer for curl
-struct CurlInitializer {
-    CurlInitializer() { curl_global_init(CURL_GLOBAL_ALL); }
-    ~CurlInitializer() { curl_global_cleanup(); }
+constexpr std::size_t WRITE_BUFFER_SIZE = 256 * 1024;  // 256 KB
+
+// RAII curl handle cleanup
+struct CurlHandle {
+    CURL* ptr = nullptr;
+
+    CurlHandle() = default;
+    explicit CurlHandle(CURL* c) : ptr(c) {}
+    ~CurlHandle() { if (ptr) curl_easy_cleanup(ptr); }
+
+    CurlHandle(const CurlHandle&) = delete;
+    CurlHandle& operator=(const CurlHandle&) = delete;
+    CurlHandle(CurlHandle&& other) noexcept : ptr(other.ptr) { other.ptr = nullptr; }
+    CurlHandle& operator=(CurlHandle&& other) noexcept {
+        if (this != &other) {
+            if (ptr) curl_easy_cleanup(ptr);
+            ptr = other.ptr;
+            other.ptr = nullptr;
+        }
+        return *this;
+    }
 };
 
-// Header callback for HEAD/GET requests
+// Header callback for HEAD/GET responses
 std::size_t header_callback(char* buffer, std::size_t size, std::size_t nitems, void* userdata) {
+    std::size_t total = size * nitems;
     auto* headers = static_cast<std::map<std::string, std::string>*>(userdata);
-    std::size_t bytes = size * nitems;
+    if (!headers) return total;
 
-    std::string_view header(buffer, bytes);
+    std::string_view header(buffer, total);
+    auto colon = header.find(':');
+    if (colon == std::string_view::npos) return total;
 
-    // Skip empty lines and HTTP status line
-    if (header.empty() || header[0] == '\r' || header[0] == '\n') {
-        return bytes;
+    auto name = header.substr(0, colon);
+    auto value = header.substr(colon + 1);
+
+    // Trim whitespace and \r\n
+    while (!value.empty() && (value.front() == ' ' || value.front() == '\t')) {
+        value.remove_prefix(1);
     }
 
-    if (header.starts_with("HTTP/")) {
-        return bytes;
+    // Remove trailing \r or \n
+    while (!value.empty() && (value.back() == '\r' || value.back() == '\n')) {
+        value.remove_suffix(1);
     }
 
-    // Parse "Name: Value"
-    auto colon_pos = header.find(':');
-    if (colon_pos != std::string_view::npos) {
-        auto name = header.substr(0, colon_pos);
-        auto value_start = colon_pos + 1;
-
-        // Skip leading whitespace
-        while (value_start < header.size() && (header[value_start] == ' ' || header[value_start] == '\t')) {
-            ++value_start;
-        }
-
-        auto value = header.substr(value_start);
-
-        // Trim trailing \r\n
-        while (!value.empty() && (value.back() == '\r' || value.back() == '\n')) {
-            value.remove_suffix(1);
-        }
-
-        // Convert name to lowercase
-        std::string lower_name;
-        lower_name.reserve(name.size());
-        for (char c : name) {
-            lower_name += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-        }
-
-        (*headers)[std::string(lower_name)] = std::string(value);
+    // Convert name to lowercase
+    std::string lower_name;
+    lower_name.reserve(name.size());
+    for (char c : name) {
+        lower_name += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
     }
 
-    return bytes;
+    (*headers)[lower_name] = std::string(value);
+    return total;
 }
 
 // Discard callback for HEAD requests
-std::size_t discard_callback(char*, std::size_t size, std::size_t nmemb, void*) {
-    return size * nmemb;
+std::size_t discard_callback(char*, std::size_t size, std::size_t nitems, void*) {
+    return size * nitems;
+}
+
+// Write callback for GET requests (stores data)
+struct WriteData {
+    std::vector<std::byte> buffer;
+    std::uint64_t total_written{0};
+    std::function<void(std::uint64_t, std::error_code)> callback;
+
+    explicit WriteData(std::function<void(std::uint64_t, std::error_code)> cb)
+        : callback(std::move(cb)) {
+        buffer.reserve(WRITE_BUFFER_SIZE);
+    }
+
+    void reset() {
+        buffer.clear();
+        total_written = 0;
+    }
+};
+
+std::size_t write_callback(char* ptr, std::size_t size, std::size_t nitems, void* userdata) {
+    auto* wd = static_cast<WriteData*>(userdata);
+    if (!wd) return 0;
+
+    std::size_t total = size * nitems;
+    const std::size_t offset = wd->buffer.size();
+
+    // Reserve space
+    wd->buffer.reserve(offset + total);
+    wd->buffer.resize(offset + total);
+
+    // Copy new data
+    std::memcpy(wd->buffer.data() + offset, ptr, total);
+    wd->total_written += total;
+
+    // Call progress callback if set
+    if (wd->callback) {
+        wd->callback(wd->total_written, {});
+    }
+
+    return total;
 }
 
 } // namespace
 
 //=============================================================================
-// HttpSession
+// HttpResponse
 //=============================================================================
 
-void HttpSession::global_init() noexcept {
-    static CurlInitializer init;
+HttpResponse HttpSession::parse_response(void* curl) noexcept {
+    HttpResponse response{};
+
+    // Get content length
+    double cl = 0;
+    if (curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl) == CURLE_OK) {
+        response.content_length = static_cast<std::uint64_t>(cl);
+    }
+
+    // Get content type
+    char* ct = nullptr;
+    if (curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &ct) == CURLE_OK && ct) {
+        response.content_type = ct;
+    }
+
+    // Get response code
+    long http_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+    response.status_code = static_cast<std::int32_t>(http_code);
+
+    // Check if ranges are supported (from HEAD response)
+    struct curl_header {
+        char* name = nullptr;
+        char* value = nullptr;
+    };
+    struct curl_header* header = nullptr;
+
+    curl_slist* headers_list = nullptr;
+    headers_list = curl_slist_append(nullptr, "Accept: */*");
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers_list);
+
+    // Note: We'd do a HEAD request separately to check for accept-ranges
+    // For now, assume most modern servers support ranges
+    response.accepts_ranges = true;
+
+    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, reinterpret_cast<void*>(header_callback));
+    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &response.headers);
+
+    // Perform the request
+    CURLcode result = curl_easy_perform(curl);
+
+    curl_slist_free_all(headers_list);
+
+    return response;
 }
 
-void HttpSession::global_cleanup() noexcept {
-    curl_global_cleanup();
-}
+//=============================================================================
+// HttpSession
+//=============================================================================
 
 HttpSession::HttpSession() = default;
 
@@ -99,96 +188,121 @@ HttpSession& HttpSession::operator=(HttpSession&& other) noexcept {
     return *this;
 }
 
-std::expected<HttpResponse, std::error_code> HttpSession::head(const std::string& url) noexcept {
-    auto* curl = curl_easy_init();
-    if (!curl) {
+std::expected<HttpResponse, std::error_code>
+HttpSession::head(const std::string& url) noexcept {
+    CurlHandle curl = CurlHandle(curl_easy_init());
+    if (!curl.ptr) {
         return std::unexpected(make_error_code(DownloadErrc::network_error));
     }
 
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_NOBODY, 1L); // HEAD request
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(curl, CURLOPT_MAXREDIRS, static_cast<long>(MAX_REDIRECTS));
-    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, static_cast<long>(CONNECTION_TIMEOUT_SEC));
-    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
-    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &connection_pool_["_temp_headers"]);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, discard_callback);
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+    // Set URL
+    curl_easy_setopt(curl.ptr, CURLOPT_URL, url.c_str());
 
-    auto result = curl_easy_perform(curl);
-    long http_code = 0;
+    // HEAD request
+    curl_easy_setopt(curl.ptr, CURLOPT_NOBODY, 1L);
+    curl_easy_setopt(curl.ptr, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl.ptr, CURLOPT_MAXREDIRS, static_cast<long>(MAX_REDIRECTS));
+    curl_easy_setopt(curl.ptr, CURLOPT_CONNECTTIMEOUT, static_cast<long>(CONNECTION_TIMEOUT_SEC));
+    curl_easy_setopt(curl.ptr, CURLOPT_SSL_VERIFYPEER, 1L);
+    curl_easy_setopt(curl.ptr, CURLOPT_SSL_VERIFYHOST, 2L);
 
-    if (result == CURLE_OK) {
-        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    }
+    // Perform request
+    CURLcode result = curl_easy_perform(curl.ptr);
 
-    HttpResponse response = parse_response(curl);
-    response.status_code = static_cast<std::int32_t>(http_code);
-
-    curl_easy_cleanup(curl);
-
+    std::error_code ec;
     if (result != CURLE_OK) {
-        return std::unexpected(make_error_code(DownloadErrc::network_error));
-    }
+        ec = make_error_code(DownloadErrc::network_error);
+    } else {
+        long http_code = 0;
+        curl_easy_getinfo(curl.ptr, CURLINFO_RESPONSE_CODE, &http_code);
 
-    if (http_code >= 400) {
-        if (http_code == 404) {
-            return std::unexpected(make_error_code(DownloadErrc::not_found));
+        if (http_code >= 400) {
+            if (http_code == 404) {
+                ec = make_error_code(DownloadErrc::not_found);
+            } else if (http_code >= 500) {
+                ec = make_error_code(DownloadErrc::server_error);
+            } else if (http_code == 401 || http_code == 403) {
+                ec = make_error_code(DownloadErrc::access_denied);
+            }
         }
-        return std::unexpected(make_error_code(DownloadErrc::server_error));
     }
 
-    return response;
+    auto response = parse_response(curl.ptr);
+
+    // Set headers from response
+    if (!ec) {
+        response.accepts_ranges = true;
+        response.filename = extract_filename(response.headers);
+    }
+
+    return ec ? std::unexpected(ec) : std::expected<HttpResponse, std::error_code>{response};
 }
 
-std::expected<HttpResponse, std::error_code> HttpSession::get(const std::string& url,
-                                                                std::uint64_t offset,
-                                                                std::uint64_t size) noexcept {
-    auto* curl = curl_easy_init();
-    if (!curl) {
+std::expected<HttpResponse, std::error_code>
+HttpSession::get(const std::string& url,
+                std::uint64_t offset,
+                std::uint64_t size) noexcept {
+    CurlHandle curl = CurlHandle(curl_easy_init());
+    if (!curl.ptr) {
         return std::unexpected(make_error_code(DownloadErrc::network_error));
     }
 
-    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(curl, CURLOPT_MAXREDIRS, static_cast<long>(MAX_REDIRECTS));
-    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, static_cast<long>(CONNECTION_TIMEOUT_SEC));
-    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
-    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &connection_pool_["_temp_headers"]);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, discard_callback);
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
-    curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2TLS);
+    // Set URL
+    curl_easy_setopt(curl.ptr, CURLOPT_URL, url.c_str());
 
+    // Range header
     if (size > 0) {
         std::string range = std::format("{}-{}", offset, offset + size - 1);
-        curl_easy_setopt(curl, CURLOPT_RANGE, range.c_str());
+        curl_easy_setopt(curl.ptr, CURLOPT_RANGE, range.c_str());
     }
 
-    auto result = curl_easy_perform(curl);
-    long http_code = 0;
+    curl_easy_setopt(curl.ptr, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl.ptr, CURLOPT_MAXREDIRS, static_cast<long>(MAX_REDIRECTS));
+    curl_easy_setopt(curl.ptr, CURLOPT_CONNECTTIMEOUT, static_cast<long>(CONNECTION_TIMEOUT_SEC));
+    curl_easy_setopt(curl.ptr, CURLOPT_LOW_SPEED_LIMIT, 1L);
+    curl_easy_setopt(curl.ptr, CURLOPT_LOW_SPEED_TIME, static_cast<long>(STALL_TIMEOUT_SEC));
+    curl_easy_setopt(curl.ptr, CURLOPT_SSL_VERIFYPEER, 1L);
+    curl_easy_setopt(curl.ptr, CURLOPT_SSL_VERIFYHOST, 2L);
 
-    if (result == CURLE_OK) {
-        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    }
+    // HTTP/2
+    curl_easy_setopt(curl.ptr, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2TLS);
 
-    HttpResponse response = parse_response(curl);
-    response.status_code = static_cast<std::int32_t>(http_code);
+    // Write function
+    WriteData write_data;
+    curl_easy_setopt(curl.ptr, CURLOPT_WRITEFUNCTION, reinterpret_cast<void*>(write_callback));
+    curl_easy_setopt(curl.ptr, CURLOPT_WRITEDATA, &write_data);
 
-    curl_easy_cleanup(curl);
+    // Perform request
+    CURLcode result = curl_easy_perform(curl.ptr);
 
+    std::error_code ec;
     if (result != CURLE_OK) {
-        return std::unexpected(make_error_code(DownloadErrc::network_error));
+        ec = make_error_code(DownloadErrc::network_error);
+    } else {
+        long http_code = 0;
+        curl_easy_getinfo(curl.ptr, CURLINFO_RESPONSE_CODE, &http_code);
+        if (http_code >= 400) {
+            if (http_code == 416) {
+                ec = make_error_code(DownloadErrc::invalid_range);
+            } else if (http_code >= 500) {
+                ec = make_error_code(DownloadErrc::server_error);
+            } else {
+                ec = make_error_code(DownloadErrc::network_error);
+            }
+        }
     }
 
-    return response;
+    HttpResponse response = parse_response(curl.ptr);
+    return ec ? std::unexpected(ec) : std::expected<HttpResponse, std::error_code>{response};
 }
 
 void* HttpSession::acquire_connection(const std::string& host) noexcept {
+    // Clean up old idle connections first
+    cleanup_idle_connections();
+
     auto& pool = connection_pool_[host];
 
-    // Find idle connection
+    // Find or create connection
     for (auto& entry : pool) {
         if (!entry.in_use) {
             entry.in_use = true;
@@ -200,6 +314,10 @@ void* HttpSession::acquire_connection(const std::string& host) noexcept {
     // Create new connection
     CURL* curl = curl_easy_init();
     if (curl) {
+        // Default options for pooled connections
+        curl_easy_setopt(curl, CURLOPT_FORBID_REUSE, 1L);
+        curl_easy_setopt(curl, CURLOPT_PIPEWAIT, 1L);
+
         pool.push_back({curl, std::chrono::steady_clock::now(), true});
         return curl;
     }
@@ -214,7 +332,6 @@ void HttpSession::release_connection(const std::string& host, void* handle) noex
     for (auto& entry : it->second) {
         if (entry.handle == handle) {
             entry.in_use = false;
-            entry.last_used = std::chrono::steady_clock::now();
             return;
         }
     }
@@ -222,60 +339,39 @@ void HttpSession::release_connection(const std::string& host, void* handle) noex
 
 void HttpSession::cleanup_idle_connections() noexcept {
     auto now = std::chrono::steady_clock::now();
-    constexpr auto IDLE_TIMEOUT = std::chrono::seconds(60);
+    constexpr std::chrono::seconds IDLE_TIMEOUT(60);
 
     for (auto& [host, pool] : connection_pool_) {
-        auto it = std::remove_if(pool.begin(), pool.end(),
-            [now](const ConnectionEntry& entry) {
-                if (!entry.in_use) {
-                    auto idle_time = std::chrono::duration_cast<std::chrono::seconds>(
-                        now - entry.last_used);
-                    if (idle_time > IDLE_TIMEOUT) {
-                        curl_easy_cleanup(static_cast<CURL*>(entry.handle));
-                        return true;
-                    }
-                }
-                return false;
+        auto end = std::remove_if(pool.begin(), pool.end(),
+            [now](const ConnectionEntry& e) {
+                auto idle = std::chrono::duration_cast<std::chrono::seconds>(
+                    now - e.last_used);
+                return !e.in_use && idle > IDLE_TIMEOUT;
             });
-        pool.erase(it, pool.end());
+        pool.erase(pool.begin(), end);
     }
 }
 
-HttpResponse HttpSession::parse_response(void* curl) noexcept {
-    HttpResponse response;
-
-    // Get info from curl
-    double cl = 0;
-    if (curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl) == CURLE_OK) {
-        response.content_length = static_cast<std::uint64_t>(cl);
+std::string HttpSession::extract_filename(const std::map<std::string, std::string>& headers) noexcept {
+    auto it = headers.find("content-disposition");
+    if (it != headers.end() && !it->second.empty()) {
+        return parse_content_disposition(it->second);
     }
-
-    char* ct = nullptr;
-    if (curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &ct) == CURLE_OK && ct) {
-        response.content_type = ct;
-    }
-
-    // Note: headers are in connection_pool_["_temp_headers"] which should be cleared
-    // This is a simplified implementation - in full version we'd pass headers map directly
-
-    response.accepts_ranges = true; // We'll probe this separately
-    response.content_type = "application/octet-stream";
-
-    return response;
+    return {};
 }
 
-std::string HttpSession::extract_filename(std::string_view content_disposition) noexcept {
-    // Parse "attachment; filename=\"file.txt\"" or "attachment; filename=file.txt"
-    static const std::regex filename_regex(R"(filename[*]?=["']?([^"'\r\n;]+)["']?)",
-                                           std::regex::icase);
-
-    std::string cd(content_disposition);
-    std::smatch match;
-
-    if (std::regex_search(cd, match, filename_regex) && match.size() > 1) {
-        return match[1].str();
+std::string HttpSession::parse_content_disposition(std::string_view content_disposition) noexcept {
+    // Parse "attachment; filename=file.zip"
+    auto filename_pos = content_disposition.find("filename=");
+    if (filename_pos != std::string_view::npos) {
+        auto filename = content_disposition.substr(filename_pos + 9);
+        // Remove quotes if present
+        if (filename.front() == '"' || filename.front() == '\'') {
+            filename.remove_prefix(1);
+            filename.remove_suffix(1);
+        }
+        return std::string(filename);
     }
-
     return {};
 }
 

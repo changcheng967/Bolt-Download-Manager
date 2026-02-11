@@ -74,9 +74,9 @@ void ProgressBar::update(std::uint64_t current, std::uint64_t speed_bps) noexcep
     for (int i = 0; i < filled; ++i) {
         bar += '=';
     }
-    bar += ">";
+    bar.append(">");
     for (int i = 0; i < empty; ++i) {
-        bar += ' ';
+        bar.append(" ");
     }
 
     line += bar;

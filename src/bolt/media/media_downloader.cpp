@@ -29,7 +29,7 @@ MediaDownloader::detect_manifest(std::string_view url) noexcept {
 }
 
 std::error_code MediaDownloader::fetch_hls_playlist(const std::string& url) noexcept {
-    HttpSession session;
+    core::HttpSession session;
     auto response = session.head(url);
 
     if (!response) {
@@ -137,7 +137,8 @@ MediaGrabber::extract_media_urls(std::string_view page_content) noexcept {
     };
 
     for (const auto& pattern : patterns) {
-        std::cregex_iterator it(page_content.begin(), page_content.end(), pattern);
+        std::string content_str(page_content);
+        std::cregex_iterator it(content_str.begin(), content_str.end(), pattern);
         std::cregex_iterator end;
 
         while (it != end) {

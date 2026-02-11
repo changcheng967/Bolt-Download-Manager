@@ -1,7 +1,7 @@
 // Copyright (c) 2026 changcheng967. All rights reserved.
 
 #include <bolt/browser/native_host.hpp>
-#include <bolt/core/download_manager.hpp>
+#include <bolt/core/download_engine.hpp>
 #include <nlohmann/json.hpp>
 #include <iostream>
 #include <windows.h>

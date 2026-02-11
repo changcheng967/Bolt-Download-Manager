@@ -9,7 +9,6 @@ add_executable(boltdm_host)
 
 target_sources(boltdm_host PRIVATE
     native_host.cpp
-    messaging.cpp
 )
 
 target_include_directories(boltdm_host PRIVATE

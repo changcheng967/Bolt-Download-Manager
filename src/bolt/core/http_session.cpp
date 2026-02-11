@@ -222,7 +222,7 @@ HttpSession::head(const std::string& url) noexcept {
             } else if (http_code >= 500) {
                 ec = make_error_code(DownloadErrc::server_error);
             } else if (http_code == 401 || http_code == 403) {
-                ec = make_error_code(DownloadErrc::access_denied);
+                ec = make_error_code(DownloadErrc::permission_denied);
             }
         }
     }
@@ -318,7 +318,11 @@ void* HttpSession::acquire_connection(const std::string& host) noexcept {
         curl_easy_setopt(curl, CURLOPT_FORBID_REUSE, 1L);
         curl_easy_setopt(curl, CURLOPT_PIPEWAIT, 1L);
 
-        pool.push_back({curl, std::chrono::steady_clock::now(), true});
+        ConnectionEntry entry;
+        entry.handle = curl;
+        entry.last_used = std::chrono::steady_clock::now();
+        entry.in_use = true;
+        pool.push_back(entry);
         return curl;
     }
 

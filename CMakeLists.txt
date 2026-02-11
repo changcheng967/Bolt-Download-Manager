@@ -25,9 +25,11 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 # Subdirectories
+# Note: vcpkg is required for full build. Install dependencies first:
+# vcpkg install curl boost-asio qt6 qt6-charts qt6-svg nlohmann-json spdlog openssl catch2
 add_subdirectory(src/bolt/core)
 add_subdirectory(src/bolt/disk)
-# Temporarily skip GUI until Qt6 is available via vcpkg
+# GUI requires Qt6 - skip until installed
 # add_subdirectory(src/bolt/cli)
 # add_subdirectory(src/bolt/gui)
 # add_subdirectory(src/bolt/browser)
@@ -35,3 +37,11 @@ add_subdirectory(src/bolt/disk)
 # add_subdirectory(tests)
 
 feature_summary(WHAT ALL)
+
+# Add placeholder for Windows-specific build (using clang-cl directly for now)
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND NOT DEFINED BOLT_SIMPLE_BUILD)
+    set(BOLT_SIMPLE_BUILD ON)
+    add_compile_options(/std:c++23 /W4 /permissive-)
+    # Simple build directly with clang-cl
+    set(CMAKE_EXE_LINKER \"C:\\Program Files\\LLVM\\bin\\lld-link.exe\")
+endif()

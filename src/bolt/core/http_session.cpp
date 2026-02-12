@@ -120,59 +120,6 @@ std::size_t write_callback(char* ptr, std::size_t size, std::size_t nitems, void
 } // namespace
 
 //=============================================================================
-// HttpResponse
-//=============================================================================
-
-HttpResponse HttpSession::parse_response(void* curl) noexcept {
-    HttpResponse response{};
-
-    // Get content length (use newer _T variant to avoid deprecated warning)
-    curl_off_t cl = 0;
-    if (curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &cl) == CURLE_OK && cl > 0) {
-        response.content_length = static_cast<std::uint64_t>(cl);
-    } else {
-        // Content length unknown - server may use chunked encoding
-        response.content_length = 0;
-    }
-
-    // Get content type
-    char* ct = nullptr;
-    if (curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &ct) == CURLE_OK && ct) {
-        response.content_type = ct;
-    }
-
-    // Get response code
-    long http_code = 0;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    response.status_code = static_cast<std::int32_t>(http_code);
-
-    // Check if ranges are supported (from HEAD response)
-    struct curl_header {
-        char* name = nullptr;
-        char* value = nullptr;
-    };
-    struct curl_header* header = nullptr;
-
-    curl_slist* headers_list = nullptr;
-    headers_list = curl_slist_append(nullptr, "Accept: */*");
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers_list);
-
-    // Note: We'd do a HEAD request separately to check for accept-ranges
-    // For now, assume most modern servers support ranges
-    response.accepts_ranges = true;
-
-    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, reinterpret_cast<void*>(header_callback));
-    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &response.headers);
-
-    // Perform the request
-    CURLcode result = curl_easy_perform(curl);
-
-    curl_slist_free_all(headers_list);
-
-    return response;
-}
-
-//=============================================================================
 // HttpSession
 //=============================================================================
 
@@ -238,37 +185,35 @@ HttpSession::head(const std::string& url) noexcept {
         }
     }
 
-    // Get content length from headers or curl info
-    curl_off_t cl = 0;
-    if (curl_easy_getinfo(curl.ptr, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &cl) == CURLE_OK && cl > 0) {
-        response.content_length = static_cast<std::uint64_t>(cl);
-    } else {
-        // Try to get from Content-Length header
-        auto it = response.headers.find("content-length");
-        if (it != response.headers.end() && !it->second.empty()) {
-            try {
-                response.content_length = std::stoull(it->second);
-            } catch (...) {
-                response.content_length = 0;
-            }
+    // Get content length from headers (CURLINFO_CONTENT_LENGTH_DOWNLOAD_T doesn't work for HEAD)
+    auto cl_it = response.headers.find("content-length");
+    if (cl_it != response.headers.end() && !cl_it->second.empty()) {
+        try {
+            response.content_length = std::stoull(cl_it->second);
+        } catch (...) {
+            response.content_length = 0;
         }
+    } else {
+        response.content_length = 0;
     }
 
-    // Get content type
-    char* ct = nullptr;
-    if (curl_easy_getinfo(curl.ptr, CURLINFO_CONTENT_TYPE, &ct) == CURLE_OK && ct) {
-        response.content_type = ct;
+    // Get content type from headers
+    auto ct_it = response.headers.find("content-type");
+    if (ct_it != response.headers.end() && !ct_it->second.empty()) {
+        response.content_type = ct_it->second;
     }
 
+    // Get response code
     long http_code = 0;
     curl_easy_getinfo(curl.ptr, CURLINFO_RESPONSE_CODE, &http_code);
     response.status_code = static_cast<std::int32_t>(http_code);
 
-    // Set headers from response
-    if (!ec) {
-        response.accepts_ranges = true;
-        response.filename = extract_filename(response.headers);
-    }
+    // Check if ranges are supported
+    auto ar_it = response.headers.find("accept-ranges");
+    response.accepts_ranges = (ar_it != response.headers.end() && ar_it->second.find("bytes") != std::string::npos);
+
+    // Extract filename
+    response.filename = extract_filename(response.headers);
 
     return ec ? std::unexpected(ec) : std::expected<HttpResponse, std::error_code>{response};
 }
@@ -281,6 +226,8 @@ HttpSession::get(const std::string& url,
     if (!curl.ptr) {
         return std::unexpected(make_error_code(DownloadErrc::network_error));
     }
+
+    HttpResponse response{};
 
     // Set URL
     curl_easy_setopt(curl.ptr, CURLOPT_URL, url.c_str());
@@ -302,10 +249,13 @@ HttpSession::get(const std::string& url,
     // HTTP/2
     curl_easy_setopt(curl.ptr, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2TLS);
 
-    // Write function
-    WriteData write_data;
-    curl_easy_setopt(curl.ptr, CURLOPT_WRITEFUNCTION, reinterpret_cast<void*>(write_callback));
-    curl_easy_setopt(curl.ptr, CURLOPT_WRITEDATA, &write_data);
+    // Set header callback to capture headers
+    curl_easy_setopt(curl.ptr, CURLOPT_HEADERFUNCTION, reinterpret_cast<void*>(header_callback));
+    curl_easy_setopt(curl.ptr, CURLOPT_HEADERDATA, &response.headers);
+
+    // Write function (discard data for now - Segment handles actual writing)
+    curl_easy_setopt(curl.ptr, CURLOPT_WRITEFUNCTION, reinterpret_cast<void*>(discard_callback));
+    curl_easy_setopt(curl.ptr, CURLOPT_WRITEDATA, nullptr);
 
     // Perform request
     CURLcode result = curl_easy_perform(curl.ptr);
@@ -327,7 +277,23 @@ HttpSession::get(const std::string& url,
         }
     }
 
-    HttpResponse response = parse_response(curl.ptr);
+    // Get content length from curl info (works for GET)
+    curl_off_t cl = 0;
+    if (curl_easy_getinfo(curl.ptr, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &cl) == CURLE_OK && cl > 0) {
+        response.content_length = static_cast<std::uint64_t>(cl);
+    }
+
+    // Get content type
+    char* ct = nullptr;
+    if (curl_easy_getinfo(curl.ptr, CURLINFO_CONTENT_TYPE, &ct) == CURLE_OK && ct) {
+        response.content_type = ct;
+    }
+
+    // Get response code
+    long http_code = 0;
+    curl_easy_getinfo(curl.ptr, CURLINFO_RESPONSE_CODE, &http_code);
+    response.status_code = static_cast<std::int32_t>(http_code);
+
     return ec ? std::unexpected(ec) : std::expected<HttpResponse, std::error_code>{response};
 }
 

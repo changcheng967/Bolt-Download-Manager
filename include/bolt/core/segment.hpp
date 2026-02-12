@@ -12,6 +12,7 @@
 #include <mutex>
 #include <expected>
 #include <vector>
+#include <thread>
 
 namespace bolt::core {
 
@@ -120,6 +121,8 @@ private:
     void* curl_handle_{nullptr};  // CURL* handle
     bolt::disk::FileWriter* file_writer_{nullptr};  // File writer for saving data
     std::uint64_t write_offset_{0};  // Current write offset within this segment
+    std::jthread segment_thread_;  // Thread for async download
+};
 };
 
 // Work stealing between segments

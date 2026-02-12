@@ -23,5 +23,3 @@ target_compile_features(boltdm PRIVATE cxx_std_23)
 if(MSVC)
     target_compile_definitions(boltdm PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()
-
-feature_summary(WHAT ALL)

@@ -85,8 +85,13 @@ public:
     [[nodiscard]] std::uint64_t remaining() const noexcept;
     [[nodiscard]] double percent() const noexcept;
 
-    [[nodiscard]] const SegmentProgress& progress() const noexcept { return progress_; }
-    [[nodiscard]] SegmentProgress& progress() noexcept { return progress_; }
+    // Access progress (returns a copy for thread safety)
+    [[nodiscard]] SegmentProgress progress() const noexcept {
+        // Lock and copy progress data for thread-safe access
+        std::lock_guard<std::mutex> lk(const_cast<std::mutex&>(mutex_));
+        SegmentProgress copy = progress_;
+        return copy;
+    }
 
     // Update downloaded bytes (called by write callback)
     void add_downloaded(std::uint64_t bytes) noexcept;
@@ -102,9 +107,9 @@ public:
     [[nodiscard]] const std::error_code& error() const noexcept { return error_; }
     void error(std::error_code ec) noexcept { error_ = ec; }
 
-    // Lock for thread-safe access to progress
-    [[nodiscard]] std::unique_lock<std::mutex> lock() const noexcept {
-        return std::unique_lock(mutex_);
+    // Lock for thread-safe access to progress (for internal use)
+    [[nodiscard]] std::unique_lock<std::mutex> lock() const {
+        return std::unique_lock(const_cast<std::mutex&>(mutex_));
     }
 
 private:

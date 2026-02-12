@@ -3,7 +3,7 @@
 #pragma once
 
 #include <cstdint>
-#include <format>
+#include <string>
 #include <string_view>
 
 namespace bolt {
@@ -22,7 +22,7 @@ constexpr struct Version {
     }
 
     [[nodiscard]] std::string to_string() const {
-        return std::format("{}.{}.{}", major, minor, patch);
+        return std::to_string(major) + "." + std::to_string(minor) + "." + std::to_string(patch);
     }
 } version;
 

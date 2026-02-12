@@ -3,10 +3,33 @@
 #include <bolt/cli/commands.hpp>
 #include <bolt/version.hpp>
 #include <iostream>
+#include <exception>
+#include <cstdlib>
 
 using namespace bolt::cli;
 
+// Terminate handler to catch exceptions in noexcept functions
+static void bolt_terminate_handler() {
+    static bool in_terminate = false;
+    if (in_terminate) {
+        std::abort();  // Prevent re-entrant abort
+    }
+    in_terminate = true;
+
+    std::cerr << "FATAL: std::terminate called!" << std::endl;
+    try {
+        std::rethrow_exception(std::current_exception());
+    } catch (const std::exception& e) {
+        std::cerr << "Exception: " << e.what() << std::endl;
+    } catch (...) {
+        std::cerr << "Unknown exception in noexcept context" << std::endl;
+    }
+    std::cerr << "Aborting..." << std::endl;
+    std::abort();
+}
+
 int main(int argc, char* argv[]) {
+    std::set_terminate(bolt_terminate_handler);
     // Parse arguments
     CliArgs args = parse_args(argc, argv);
 

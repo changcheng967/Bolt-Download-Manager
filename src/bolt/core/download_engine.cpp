@@ -196,7 +196,7 @@ std::vector<SegmentProgress> DownloadEngine::segment_progress() const noexcept {
 
     auto lock = std::unique_lock(mutex_);
     for (const auto& seg : segments_) {
-        auto seg_lock = seg->lock();
+        // progress() now returns a copy, no need to lock segment
         result.push_back(seg->progress());
     }
 
@@ -272,8 +272,8 @@ void DownloadEngine::attempt_work_stealing() noexcept {
     for (auto& requester : segments_) {
         if (requester->state() != SegmentState::downloading) continue;
 
-        auto lock = requester->lock();
-        const auto& req_progress = requester->progress();
+        // progress() now returns a copy, no lock needed
+        const auto req_progress = requester->progress();
 
         // If this segment is much slower than others, try to steal
         // This is a simplified check - real implementation would be smarter

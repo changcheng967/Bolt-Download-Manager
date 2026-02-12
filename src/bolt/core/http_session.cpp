@@ -4,6 +4,7 @@
 #include <bolt/core/config.hpp>
 #include <curl/curl.h>
 #include <algorithm>
+#include <cstdlib>
 #include <string>
 
 // Windows headers
@@ -188,9 +189,11 @@ HttpSession::head(const std::string& url) noexcept {
     // Get content length from headers (CURLINFO_CONTENT_LENGTH_DOWNLOAD_T doesn't work for HEAD)
     auto cl_it = response.headers.find("content-length");
     if (cl_it != response.headers.end() && !cl_it->second.empty()) {
-        try {
-            response.content_length = std::stoull(cl_it->second);
-        } catch (...) {
+        char* end = nullptr;
+        unsigned long long val = std::strtoull(cl_it->second.c_str(), &end, 10);
+        if (end == cl_it->second.c_str() + cl_it->second.size()) {
+            response.content_length = static_cast<std::uint64_t>(val);
+        } else {
             response.content_length = 0;
         }
     } else {

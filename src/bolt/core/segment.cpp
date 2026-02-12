@@ -10,7 +10,7 @@ namespace bolt::core {
 namespace {
 
 // libcurl write callback
-std::size_t write_callback(char* ptr, std::size_t size, std::size_t nmemb, void* userdata) {
+std::size_t write_callback(char* ptr, std::size_t size, std::size_t nmemb, void* userdata) noexcept {
     auto* seg = static_cast<Segment*>(userdata);
     std::size_t bytes = size * nmemb;
 
@@ -25,7 +25,9 @@ std::size_t write_callback(char* ptr, std::size_t size, std::size_t nmemb, void*
         }
     }
 
+    // Update progress using add_downloaded (locks mutex internally)
     seg->add_downloaded(bytes);
+
     return bytes;
 }
 
@@ -93,81 +95,96 @@ std::error_code Segment::start() noexcept {
         return make_error_code(DownloadErrc::network_error);
     }
 
-    progress_.start_time = std::chrono::steady_clock::now();
-    progress_.last_update = progress_.start_time;
+    try {
+        progress_.start_time = std::chrono::steady_clock::now();
+        progress_.last_update = progress_.start_time;
+    } catch (...) {
+        return make_error_code(DownloadErrc::network_error);
+    }
+
+    // Ensure file_writer is set before spawning thread (memory barrier)
+    std::atomic_thread_fence(std::memory_order_release);
 
     // Spawn download thread - download happens asynchronously
     segment_thread_ = std::jthread([this](std::stop_token stoken) {
-        // Initialize libcurl handle
-        auto* curl = curl_easy_init();
-        if (!curl) {
-            state(SegmentState::failed);
-            error_ = make_error_code(DownloadErrc::network_error);
-            return;
-        }
-
-        curl_handle_ = curl;
-
-        // Set URL
-        curl_easy_setopt(curl, CURLOPT_URL, url_.full().c_str());
-
-        // Set range header
-        std::string range = std::to_string(offset_) + "-" + std::to_string(offset_ + size_ - 1);
-        curl_easy_setopt(curl, CURLOPT_RANGE, range.c_str());
-
-        // Set callbacks
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, this);
-        curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
-        curl_easy_setopt(curl, CURLOPT_HEADERDATA, this);
-
-        // Timeouts
-        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, static_cast<long>(CONNECTION_TIMEOUT_SEC));
-        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, static_cast<long>(STALL_TIMEOUT_SEC));
-        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1L);
-
-        // SSL options
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
-
-        // Follow redirects
-        if constexpr (FOLLOW_REDIRECTS) {
-            curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-            curl_easy_setopt(curl, CURLOPT_MAXREDIRS, static_cast<long>(MAX_REDIRECTS));
-        }
-
-        // HTTP/2
-        curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2TLS);
-
-        state(SegmentState::downloading);
-
-        auto result = curl_easy_perform(curl);
-        if (result != CURLE_OK) {
-            state(SegmentState::failed);
-            error_ = make_error_code(DownloadErrc::network_error);
-            return;
-        }
-
-        long http_code = 0;
-        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-
-        if (http_code >= 400) {
-            state(SegmentState::failed);
-            if (http_code == 416) {
-                error_ = make_error_code(DownloadErrc::invalid_range);
-            } else if (http_code == 404) {
-                error_ = make_error_code(DownloadErrc::not_found);
-            } else {
-                error_ = make_error_code(DownloadErrc::server_error);
+        try {
+            // Initialize libcurl handle
+            auto* curl = curl_easy_init();
+            if (!curl) {
+                state(SegmentState::failed);
+                error_ = make_error_code(DownloadErrc::network_error);
+                return;
             }
-            return;
+
+            curl_handle_ = curl;
+
+            // Set URL
+            std::string url_str = url_.full();
+            curl_easy_setopt(curl, CURLOPT_URL, url_str.c_str());
+
+            // Set range header
+            std::string range = std::to_string(offset_) + "-" + std::to_string(offset_ + size_ - 1);
+            curl_easy_setopt(curl, CURLOPT_RANGE, range.c_str());
+
+            // Set callbacks
+            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, reinterpret_cast<void*>(write_callback));
+            curl_easy_setopt(curl, CURLOPT_WRITEDATA, this);
+
+            // Set header callback
+            curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, reinterpret_cast<void*>(header_callback));
+            curl_easy_setopt(curl, CURLOPT_HEADERDATA, this);
+
+            // Timeouts
+            curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, static_cast<long>(CONNECTION_TIMEOUT_SEC));
+            curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, static_cast<long>(STALL_TIMEOUT_SEC));
+            curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1L);
+
+            // SSL options
+            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+
+            // Follow redirects
+            if constexpr (FOLLOW_REDIRECTS) {
+                curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+                curl_easy_setopt(curl, CURLOPT_MAXREDIRS, static_cast<long>(MAX_REDIRECTS));
+            }
+
+            // HTTP/2
+            curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2TLS);
+
+            state(SegmentState::downloading);
+
+            auto result = curl_easy_perform(curl);
+            if (result != CURLE_OK) {
+                state(SegmentState::failed);
+                error_ = make_error_code(DownloadErrc::network_error);
+                return;
+            }
+
+            long http_code = 0;
+            curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+
+            if (http_code >= 400) {
+                state(SegmentState::failed);
+                if (http_code == 416) {
+                    error_ = make_error_code(DownloadErrc::invalid_range);
+                } else if (http_code == 404) {
+                    error_ = make_error_code(DownloadErrc::not_found);
+                } else {
+                    error_ = make_error_code(DownloadErrc::server_error);
+                }
+                return;
+            }
+
+            // Clean up curl handle
+            curl_easy_cleanup(curl);
+            curl_handle_ = nullptr;
+
+            state(SegmentState::completed);
+        } catch (...) {
+            state(SegmentState::failed);
+            error_ = make_error_code(DownloadErrc::network_error);
         }
-
-        // Clean up curl handle
-        curl_easy_cleanup(curl);
-        curl_handle_ = nullptr;
-
-        state(SegmentState::completed);
     });
 
     return {};
@@ -214,7 +231,7 @@ std::uint64_t Segment::can_steal(std::uint64_t min_steal) const noexcept {
     std::uint64_t remaining = size_ - progress_.downloaded_bytes;
     if (remaining <= min_steal * 2) return 0; // Keep at least min_steal
 
-    return (remaining / 2) & ~0xFFFUL; // Align to 4KB boundary, steal half
+    return (remaining / 2) & ~0xFFFULL; // Align to 4KB boundary, steal half
 }
 
 void Segment::steal_bytes(std::uint64_t bytes) noexcept {

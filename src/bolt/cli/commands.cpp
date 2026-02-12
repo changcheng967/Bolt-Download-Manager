@@ -8,6 +8,7 @@
 #include <bolt/version.hpp>
 #include <iostream>
 #include <algorithm>
+#include <cstdlib>
 #include <memory>
 #include <expected>
 #include <chrono>
@@ -59,9 +60,9 @@ CliArgs parse_args(int argc, char* argv[]) noexcept {
         }
         if (arg == "-n" || arg == "--segments") {
             if (i + 1 < argc) {
-                try {
-                    args.segments = std::stoul(argv[++i]);
-                } catch (...) {
+                char* end = nullptr;
+                args.segments = std::strtoul(argv[++i], &end, 10);
+                if (end == nullptr || *end != '\0') {
                     args.segments = 0;
                 }
             }

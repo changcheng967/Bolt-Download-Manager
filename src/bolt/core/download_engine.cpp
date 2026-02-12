@@ -64,13 +64,19 @@ std::error_code DownloadEngine::prepare() noexcept {
         output_path_ = filename_;
     }
 
+    // Handle unknown file size (server may use chunked encoding)
+    if (file_size_ == 0) {
+        // Unknown size - disable multi-segment and use streaming download
+        supports_ranges_ = false;
+    }
+
     // Probe bandwidth - disabled for now, use hardcoded value
     // TODO: Implement proper bandwidth probing
     std::uint64_t bandwidth = 10'000'000; // 10 MB/s default
 
     seg_calculator_ = std::make_unique<SegmentCalculator>(file_size_);
 
-    // Open output file for writing
+    // Open output file for writing (0 size means grow as needed)
     auto open_result = file_writer_.open(output_path_, file_size_);
     if (open_result) {
         state_.store(DownloadState::failed, std::memory_order_release);

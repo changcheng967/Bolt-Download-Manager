@@ -96,8 +96,6 @@ std::error_code Segment::start() noexcept {
     progress_.start_time = std::chrono::steady_clock::now();
     progress_.last_update = progress_.start_time;
 
-    state(SegmentState::connecting);
-
     // Spawn download thread - download happens asynchronously
     segment_thread_ = std::jthread([this](std::stop_token stoken) {
         // Initialize libcurl handle
@@ -240,19 +238,28 @@ double Segment::percent() const noexcept {
 }
 
 void Segment::add_downloaded(std::uint64_t bytes) noexcept {
+    auto now = std::chrono::steady_clock::now();
+
     std::unique_lock<std::mutex> lk = lock();
     progress_.downloaded_bytes += bytes;
     write_offset_ += bytes;
-    progress_.last_update = std::chrono::steady_clock::now();
 
-    // Calculate instantaneous speed
-    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-        progress_.last_update - progress_.start_time);
-    if (elapsed.count() > 0) {
-        progress_.speed_bps = static_cast<std::uint64_t>(
-            (static_cast<double>(bytes) * 1000.0) / elapsed.count());
+    // Calculate time delta from last update for instantaneous speed
+    auto delta_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - progress_.last_update).count();
+    auto total_elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - progress_.start_time).count();
+
+    if (total_elapsed_ms > 0) {
+        // Average speed: total bytes / total time
         progress_.average_speed_bps = static_cast<std::uint64_t>(
-            (static_cast<double>(progress_.downloaded_bytes) * 1000.0) / elapsed.count());
+            (static_cast<double>(progress_.downloaded_bytes) * 1000.0) / total_elapsed_ms);
+    }
+
+    // Instantaneous speed: bytes since last update / time since last update
+    // Use a small minimum window (100ms) to avoid spikes
+    if (delta_ms >= 100) {
+        progress_.speed_bps = static_cast<std::uint64_t>(
+            (static_cast<double>(bytes) * 1000.0) / delta_ms);
+        progress_.last_update = now;
     }
 }
 

@@ -72,9 +72,6 @@ public:
 private:
     std::map<std::string, std::vector<ConnectionEntry>> connection_pool_;
 
-    // Parse response headers
-    static HttpResponse parse_response(void* curl) noexcept;
-
     // Extract filename from headers
     static std::string extract_filename(const std::map<std::string, std::string>& headers) noexcept;
 

@@ -123,7 +123,6 @@ private:
     std::uint64_t write_offset_{0};  // Current write offset within this segment
     std::jthread segment_thread_;  // Thread for async download
 };
-};
 
 // Work stealing between segments
 std::expected<std::pair<std::uint32_t, std::uint64_t>, std::error_code>

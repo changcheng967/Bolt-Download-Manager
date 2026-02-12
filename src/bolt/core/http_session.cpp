@@ -346,7 +346,8 @@ void HttpSession::cleanup_idle_connections() noexcept {
     auto now = std::chrono::steady_clock::now();
     constexpr std::chrono::seconds IDLE_TIMEOUT(60);
 
-    for (auto& [host, pool] : connection_pool_) {
+    for (auto& pair : connection_pool_) {
+        auto& pool = pair.second;
         auto end = std::remove_if(pool.begin(), pool.end(),
             [&now, IDLE_TIMEOUT](const ConnectionEntry& e) {
                 auto idle = std::chrono::duration_cast<std::chrono::seconds>(

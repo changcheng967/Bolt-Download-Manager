@@ -7,7 +7,7 @@
 namespace bolt::core {
 
 std::expected<Url, std::error_code> Url::parse(std::string_view url_str) noexcept {
-    Url url(std::string(url_str));  // Store a copy of the input string
+    Url url;  // Don't store input string yet - will set after parsing
 
     // Parse scheme
     auto scheme_end = url_str.find("://");
@@ -89,6 +89,8 @@ std::expected<Url, std::error_code> Url::parse(std::string_view url_str) noexcep
         url.fragment_ = std::string(url_str.substr(frag_pos + 1));
     }
 
+    // Store the original string before returning
+    url.set_str(std::string(url_str));
     return url;
 }
 

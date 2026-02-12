@@ -30,6 +30,10 @@ public:
     Url() = default;
     explicit Url(std::string url_str) : str_(std::move(url_str)) {}
 
+protected:
+    // Internal initialization helper for parse()
+    void set_str(std::string s) noexcept { str_ = std::move(s); }
+
 private:
     std::string str_;
     std::string scheme_;

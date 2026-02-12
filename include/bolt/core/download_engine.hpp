@@ -106,8 +106,11 @@ public:
     void config(const DownloadConfig& cfg) noexcept { config_ = cfg; }
     [[nodiscard]] const DownloadConfig& config() const noexcept { return config_; }
 
-    // Set progress callback
-    void callback(DownloadCallback cb) noexcept { callback_ = std::move(cb); }
+    // Set progress callback (thread-safe)
+    void callback(DownloadCallback cb) noexcept {
+        std::lock_guard<std::mutex> lock(callback_mutex_);
+        callback_ = std::move(cb);
+    }
 
     // Get current state
     [[nodiscard]] DownloadState state() const noexcept { return state_.load(std::memory_order_acquire); }
@@ -174,6 +177,7 @@ private:
     std::unique_ptr<SegmentCalculator> seg_calculator_;
 
     DownloadCallback callback_;
+    std::mutex callback_mutex_;  // Protects callback_ access
     HttpSession http_session_;
     bolt::disk::FileWriter file_writer_;
 

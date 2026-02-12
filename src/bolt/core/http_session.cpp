@@ -357,7 +357,7 @@ void HttpSession::cleanup_idle_connections() noexcept {
                     now - e.last_used);
                 return !e.in_use && idle > IDLE_TIMEOUT;
             });
-        pool.erase(pool.begin(), end);
+        pool.erase(end, pool.end());
     }
 }
 

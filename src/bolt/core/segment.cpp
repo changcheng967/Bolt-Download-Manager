@@ -30,6 +30,15 @@ std::size_t write_callback(char* ptr, std::size_t size, std::size_t nmemb, void*
     return bytes;
 }
 
+// libcurl progress callback - checks stop_requested and aborts if set
+int progress_callback(void* userdata, curl_off_t dltotal, curl_off_t dlnow,
+                    curl_off_t ultotal, curl_off_t ulnow) noexcept {
+    (void)dltotal; (void)dlnow; (void)ultotal; (void)ulnow;
+    auto* seg = static_cast<Segment*>(userdata);
+    // Return 1 to abort the transfer
+    return seg->stop_requested() ? 1 : 0;
+}
+
 // libcurl header callback (for content-range validation)
 std::size_t header_callback(char* buffer, std::size_t size, std::size_t nitems, void* userdata) {
     return size * nitems;
@@ -131,6 +140,11 @@ std::error_code Segment::start() noexcept {
             curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, reinterpret_cast<void*>(write_callback));
             curl_easy_setopt(curl, CURLOPT_WRITEDATA, this);
 
+            // Set progress callback to allow interruption
+            curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, reinterpret_cast<void*>(progress_callback));
+            curl_easy_setopt(curl, CURLOPT_XFERINFODATA, this);
+            curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);  // Enable progress callback
+
             // Set header callback
             curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, reinterpret_cast<void*>(header_callback));
             curl_easy_setopt(curl, CURLOPT_HEADERDATA, this);
@@ -204,6 +218,9 @@ std::error_code Segment::resume() noexcept {
 
 void Segment::cancel() noexcept {
     state(SegmentState::cancelled);
+
+    // Signal curl to abort via progress callback
+    stop_requested_.store(true, std::memory_order_release);
 
     // Request thread stop and wait for completion
     if (segment_thread_.joinable()) {

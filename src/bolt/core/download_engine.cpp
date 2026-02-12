@@ -18,18 +18,22 @@ DownloadEngine::DownloadEngine(Url url)
     , seg_calculator_(std::make_unique<SegmentCalculator>()) {}
 
 DownloadEngine::~DownloadEngine() {
-    // 1. Cancel all segments (stops curl transfers)
-    for (auto& seg : segments_) {
-        if (seg) seg->cancel();
-    }
-
-    // 2. Stop and join download thread BEFORE closing file
+    // 1. Stop and join download loop thread FIRST
+    // This is critical: download_loop iterates over segments_, so must be
+    // stopped before we touch segments. Also prevents race where download_loop
+    // accesses segments while they're being cancelled.
     if (download_thread_.joinable()) {
         download_thread_.request_stop();
         download_thread_.join();
     }
 
-    // 3. NOW safe to close file (no writers remain)
+    // 2. NOW cancel all segments (stops curl transfers and joins their threads)
+    // download_loop is no longer running, so no race on segments_ access
+    for (auto& seg : segments_) {
+        if (seg) seg->cancel();
+    }
+
+    // 3. All threads are now done. Safe to close file.
     if (file_writer_.is_open()) {
         file_writer_.flush();
         file_writer_.close();
@@ -191,18 +195,23 @@ std::error_code DownloadEngine::resume() noexcept {
 void DownloadEngine::cancel() noexcept {
     state_.store(DownloadState::cancelled, std::memory_order_release);
 
-    // 1. Cancel all segments first (signals curl to abort)
-    for (auto& seg : segments_) {
-        if (seg) seg->cancel();
-    }
-
-    // 2. Stop and join download thread BEFORE closing file
+    // 1. Stop and join download loop thread FIRST
+    // Prevents race where download_loop accesses segments while we cancel them
     if (download_thread_.joinable()) {
         download_thread_.request_stop();
         download_thread_.join();
     }
 
-    // 3. Close file (no writers remain)
+    // 2. NOW cancel all segments (signals curl to abort and joins their threads)
+    // download_loop is no longer running, so no race
+    for (auto& seg : segments_) {
+        if (seg) seg->cancel();
+    }
+
+    // 3. Small delay to ensure any in-flight callbacks complete
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+    // 4. Close file (all threads now done)
     if (file_writer_.is_open()) {
         file_writer_.flush();
         file_writer_.close();
@@ -246,7 +255,7 @@ void DownloadEngine::download_loop(std::stop_token stoken) noexcept {
             attempt_work_stealing();
         }
 
-        // Check completion
+        // Check completion (update_progress already writes completed/failed under lock)
         std::uint32_t completed = 0;
         std::uint32_t failed = 0;
 
@@ -256,18 +265,15 @@ void DownloadEngine::download_loop(std::stop_token stoken) noexcept {
             if (s == SegmentState::failed) ++failed;
         }
 
-        progress_.completed_segments = completed;
-        progress_.failed_segments = failed;
-
         if (completed == segments_.size()) {
             state_.store(DownloadState::completed, std::memory_order_release);
-            update_progress();  // This calls callback after releasing lock
+            update_progress();  // Final callback after releasing lock
             break;
         }
 
         if (failed > 0 && completed + failed == segments_.size()) {
             state_.store(DownloadState::failed, std::memory_order_release);
-            update_progress();  // This calls callback after releasing lock
+            update_progress();  // Final callback after releasing lock
             break;
         }
 
@@ -345,9 +351,14 @@ void DownloadEngine::update_progress() noexcept {
     calculate_eta();
     // Lock released here
 
-    // Call callback AFTER releasing lock (no deadlock possible)
-    if (callback_) {
-        callback_(progress_);
+    // Call callback AFTER releasing lock (copy under lock first)
+    DownloadCallback cb;
+    {
+        std::lock_guard<std::mutex> cb_lock(callback_mutex_);
+        cb = callback_;
+    }
+    if (cb) {
+        cb(progress_);
     }
 }
 
@@ -369,18 +380,19 @@ void DownloadEngine::reset() noexcept {
 }
 
 void DownloadEngine::stop_download() noexcept {
-    // 1. Cancel all segments (stops curl transfers)
-    for (auto& seg : segments_) {
-        if (seg) seg->cancel();
-    }
-
-    // 2. Stop and join download thread BEFORE closing file
+    // 1. Stop and join download loop thread FIRST
+    // Prevents race where download_loop accesses segments while we cancel them
     if (download_thread_.joinable()) {
         download_thread_.request_stop();
         download_thread_.join();
     }
 
-    // 3. Close file (no writers remain)
+    // 2. NOW cancel all segments (stops curl transfers and joins their threads)
+    for (auto& seg : segments_) {
+        if (seg) seg->cancel();
+    }
+
+    // 3. Close file (all threads now done)
     if (file_writer_.is_open()) {
         file_writer_.flush();
         file_writer_.close();

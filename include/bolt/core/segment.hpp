@@ -106,6 +106,9 @@ public:
     [[nodiscard]] const std::error_code& error() const noexcept { return error_; }
     void error(std::error_code ec) noexcept { error_ = ec; }
 
+    // Check if stop was requested (for curl progress callback)
+    [[nodiscard]] bool stop_requested() const noexcept { return stop_requested_.load(std::memory_order_acquire); }
+
 private:
     std::uint32_t id_;
     Url url_;
@@ -123,6 +126,7 @@ private:
     void* curl_handle_{nullptr};  // CURL* handle
     bolt::disk::FileWriter* file_writer_{nullptr};  // File writer for saving data
     std::jthread segment_thread_;  // Thread for async download
+    std::atomic<bool> stop_requested_{false};  // Signal for curl progress callback
 };
 
 // Work stealing between segments

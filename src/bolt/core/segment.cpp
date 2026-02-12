@@ -25,9 +25,8 @@ std::size_t write_callback(char* ptr, std::size_t size, std::size_t nmemb, void*
         }
     }
 
-    // Update progress using add_downloaded (locks mutex internally)
+    // Update progress using atomics (no mutex - no deadlock possible)
     seg->add_downloaded(bytes);
-
     return bytes;
 }
 
@@ -61,7 +60,9 @@ Segment::Segment(Segment&& other) noexcept
     , state_(other.state_.load())
     , progress_(other.progress_)
     , error_(other.error_)
-    , curl_handle_(other.curl_handle_) {
+    , curl_handle_(other.curl_handle_)
+    , atomic_downloaded_(other.atomic_downloaded_.load(std::memory_order_relaxed))
+    , atomic_write_offset_(other.atomic_write_offset_.load(std::memory_order_relaxed)) {
     other.curl_handle_ = nullptr;
     other.state_.store(SegmentState::pending, std::memory_order_release);
 }
@@ -82,6 +83,9 @@ Segment& Segment::operator=(Segment&& other) noexcept {
         error_ = other.error_;
         curl_handle_ = other.curl_handle_;
 
+        atomic_downloaded_.store(other.atomic_downloaded_.load(std::memory_order_relaxed), std::memory_order_relaxed);
+        atomic_write_offset_.store(other.atomic_write_offset_.load(std::memory_order_relaxed), std::memory_order_relaxed);
+
         other.curl_handle_ = nullptr;
         other.state_.store(SegmentState::pending, std::memory_order_release);
     }
@@ -101,9 +105,6 @@ std::error_code Segment::start() noexcept {
     } catch (...) {
         return make_error_code(DownloadErrc::network_error);
     }
-
-    // Ensure file_writer is set before spawning thread (memory barrier)
-    std::atomic_thread_fence(std::memory_order_release);
 
     // Spawn download thread - download happens asynchronously
     segment_thread_ = std::jthread([this](std::stop_token stoken) {
@@ -228,7 +229,7 @@ bool Segment::is_stalled(std::chrono::seconds timeout) const noexcept {
 std::uint64_t Segment::can_steal(std::uint64_t min_steal) const noexcept {
     if (state() != SegmentState::downloading) return 0;
 
-    std::uint64_t remaining = size_ - progress_.downloaded_bytes;
+    std::uint64_t remaining = size_ - atomic_downloaded_.load(std::memory_order_relaxed);
     if (remaining <= min_steal * 2) return 0; // Keep at least min_steal
 
     return (remaining / 2) & ~0xFFFULL; // Align to 4KB boundary, steal half
@@ -245,30 +246,35 @@ void Segment::add_bytes(std::uint64_t bytes) noexcept {
 }
 
 std::uint64_t Segment::remaining() const noexcept {
-    if (progress_.downloaded_bytes >= size_) return 0;
-    return size_ - progress_.downloaded_bytes;
+    auto downloaded = atomic_downloaded_.load(std::memory_order_relaxed);
+    if (downloaded >= size_) return 0;
+    return size_ - downloaded;
 }
 
 double Segment::percent() const noexcept {
     if (size_ == 0) return 100.0;
-    return static_cast<double>(progress_.downloaded_bytes) * 100.0 / static_cast<double>(size_);
+    auto downloaded = atomic_downloaded_.load(std::memory_order_relaxed);
+    return static_cast<double>(downloaded) * 100.0 / static_cast<double>(size_);
 }
 
 void Segment::add_downloaded(std::uint64_t bytes) noexcept {
     auto now = std::chrono::steady_clock::now();
 
-    std::unique_lock<std::mutex> lk = lock();
-    progress_.downloaded_bytes += bytes;
-    write_offset_ += bytes;
+    // Update atomic counters (no mutex - no deadlock possible)
+    atomic_downloaded_.fetch_add(bytes, std::memory_order_relaxed);
+    atomic_write_offset_.fetch_add(bytes, std::memory_order_relaxed);
 
     // Calculate time delta from last update for instantaneous speed
-    auto delta_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - progress_.last_update).count();
-    auto total_elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - progress_.start_time).count();
+    auto delta_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        now - progress_.last_update).count();
+    auto total_elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        now - progress_.start_time).count();
 
     if (total_elapsed_ms > 0) {
         // Average speed: total bytes / total time
+        auto downloaded = atomic_downloaded_.load(std::memory_order_relaxed);
         progress_.average_speed_bps = static_cast<std::uint64_t>(
-            (static_cast<double>(progress_.downloaded_bytes) * 1000.0) / total_elapsed_ms);
+            (static_cast<double>(downloaded) * 1000.0) / total_elapsed_ms);
     }
 
     // Instantaneous speed: bytes since last update / time since last update

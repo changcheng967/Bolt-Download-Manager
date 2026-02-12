@@ -9,7 +9,6 @@
 #include <atomic>
 #include <chrono>
 #include <functional>
-#include <mutex>
 #include <expected>
 #include <vector>
 #include <thread>
@@ -80,16 +79,16 @@ public:
     [[nodiscard]] std::uint64_t offset() const noexcept { return offset_; }
     [[nodiscard]] std::uint64_t size() const noexcept { return size_; }
     [[nodiscard]] std::uint64_t file_offset() const noexcept { return file_offset_; }
-    [[nodiscard]] std::uint64_t downloaded() const noexcept { return progress_.downloaded_bytes; }
-    [[nodiscard]] std::uint64_t write_offset() const noexcept { return write_offset_; }
+    [[nodiscard]] std::uint64_t downloaded() const noexcept { return atomic_downloaded_.load(std::memory_order_relaxed); }
+    [[nodiscard]] std::uint64_t write_offset() const noexcept { return atomic_write_offset_.load(std::memory_order_relaxed); }
     [[nodiscard]] std::uint64_t remaining() const noexcept;
     [[nodiscard]] double percent() const noexcept;
 
-    // Access progress (returns a copy for thread safety)
+    // Access progress (returns copy, may be slightly stale - that's OK)
     [[nodiscard]] SegmentProgress progress() const noexcept {
-        // Lock and copy progress data for thread-safe access
-        std::lock_guard<std::mutex> lk(const_cast<std::mutex&>(mutex_));
+        // No lock - values may be slightly stale but that's acceptable
         SegmentProgress copy = progress_;
+        copy.downloaded_bytes = atomic_downloaded_.load(std::memory_order_relaxed);
         return copy;
     }
 
@@ -107,11 +106,6 @@ public:
     [[nodiscard]] const std::error_code& error() const noexcept { return error_; }
     void error(std::error_code ec) noexcept { error_ = ec; }
 
-    // Lock for thread-safe access to progress (for internal use)
-    [[nodiscard]] std::unique_lock<std::mutex> lock() const {
-        return std::unique_lock(const_cast<std::mutex&>(mutex_));
-    }
-
 private:
     std::uint32_t id_;
     Url url_;
@@ -122,10 +116,12 @@ private:
     SegmentProgress progress_;
     std::error_code error_;
 
-    mutable std::mutex mutex_;
+    // Atomic counters for thread-safe updates from callback (no mutex needed)
+    std::atomic<std::uint64_t> atomic_downloaded_{0};
+    std::atomic<std::uint64_t> atomic_write_offset_{0};
+
     void* curl_handle_{nullptr};  // CURL* handle
     bolt::disk::FileWriter* file_writer_{nullptr};  // File writer for saving data
-    std::uint64_t write_offset_{0};  // Current write offset within this segment
     std::jthread segment_thread_;  // Thread for async download
 };
 

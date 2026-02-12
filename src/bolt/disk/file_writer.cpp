@@ -10,9 +10,12 @@ namespace bolt::disk {
 //=============================================================================
 
 std::error_code FileWriter::open(std::string_view path, std::uint64_t size) noexcept {
-    auto lock = std::lock_guard(mutex_);
+    // Check if already open
+    bool expected = false;
+    if (closed_.load(std::memory_order_acquire)) {
+        return make_error_code(DiskErrc::file_exists);
+    }
 
-    close();
     path_ = path;
 
     auto file = AsyncFile::open(path, size);
@@ -21,14 +24,15 @@ std::error_code FileWriter::open(std::string_view path, std::uint64_t size) noex
     }
 
     file_ = std::make_unique<AsyncFile>(std::move(*file));
+    closed_.store(false, std::memory_order_release);
     return {};
 }
 
 std::error_code FileWriter::write(std::uint64_t offset,
                                      const void* data,
                                      std::size_t size) noexcept {
-    auto lock = std::lock_guard(mutex_);
-
+    // No mutex - AsyncFile uses OVERLAPPED I/O with explicit offsets
+    // Multiple segments can write to different offsets simultaneously without corruption
     if (!file_) {
         return make_error_code(DiskErrc::handle_invalid);
     }
@@ -48,8 +52,7 @@ void FileWriter::write_async(std::uint64_t offset,
 }
 
 std::error_code FileWriter::flush() noexcept {
-    auto lock = std::lock_guard(mutex_);
-
+    // No mutex - flush is thread-safe in AsyncFile
     if (!file_) {
         return make_error_code(DiskErrc::handle_invalid);
     }
@@ -58,13 +61,17 @@ std::error_code FileWriter::flush() noexcept {
 }
 
 void FileWriter::close() noexcept {
-    auto lock = std::lock_guard(mutex_);
+    // Atomic guard against double-close
+    if (closed_.load(std::memory_order_acquire)) {
+        return;  // Already closed
+    }
 
     if (file_) {
         file_->flush();
         file_->close();
         file_.reset();
     }
+    closed_.store(true, std::memory_order_release);
 }
 
 //=============================================================================

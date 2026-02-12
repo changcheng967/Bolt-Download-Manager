@@ -18,9 +18,21 @@ DownloadEngine::DownloadEngine(Url url)
     , seg_calculator_(std::make_unique<SegmentCalculator>()) {}
 
 DownloadEngine::~DownloadEngine() {
+    // 1. Cancel all segments (stops curl transfers)
+    for (auto& seg : segments_) {
+        if (seg) seg->cancel();
+    }
+
+    // 2. Stop and join download thread BEFORE closing file
     if (download_thread_.joinable()) {
         download_thread_.request_stop();
         download_thread_.join();
+    }
+
+    // 3. NOW safe to close file (no writers remain)
+    if (file_writer_.is_open()) {
+        file_writer_.flush();
+        file_writer_.close();
     }
 }
 
@@ -178,10 +190,22 @@ std::error_code DownloadEngine::resume() noexcept {
 
 void DownloadEngine::cancel() noexcept {
     state_.store(DownloadState::cancelled, std::memory_order_release);
-    download_thread_.request_stop();
 
+    // 1. Cancel all segments first (signals curl to abort)
     for (auto& seg : segments_) {
-        seg->cancel();
+        if (seg) seg->cancel();
+    }
+
+    // 2. Stop and join download thread BEFORE closing file
+    if (download_thread_.joinable()) {
+        download_thread_.request_stop();
+        download_thread_.join();
+    }
+
+    // 3. Close file (no writers remain)
+    if (file_writer_.is_open()) {
+        file_writer_.flush();
+        file_writer_.close();
     }
 }
 
@@ -237,19 +261,15 @@ void DownloadEngine::download_loop(std::stop_token stoken) noexcept {
 
         if (completed == segments_.size()) {
             state_.store(DownloadState::completed, std::memory_order_release);
-            update_progress();
-            if (callback_) callback_(progress_);
+            update_progress();  // This calls callback after releasing lock
             break;
         }
 
         if (failed > 0 && completed + failed == segments_.size()) {
             state_.store(DownloadState::failed, std::memory_order_release);
-            update_progress();
-            if (callback_) callback_(progress_);
+            update_progress();  // This calls callback after releasing lock
             break;
         }
-
-        if (callback_) callback_(progress_);
 
         std::this_thread::sleep_for(BANDWIDTH_SAMPLE_INTERVAL);
     }
@@ -296,36 +316,39 @@ void DownloadEngine::attempt_work_stealing() noexcept {
 }
 
 void DownloadEngine::update_progress() noexcept {
-    auto lock = std::unique_lock(mutex_);
-
+    // Gather segment data WITHOUT holding lock (atomics are lock-free)
     std::uint64_t total_downloaded = 0;
-    std::uint64_t total_speed = 0;
-    std::uint32_t active = 0;
+    double max_speed = 0.0;
+    int active = 0, completed = 0, failed = 0;
 
-    for (const auto& seg : segments_) {
+    for (auto& seg : segments_) {
         total_downloaded += seg->downloaded();
-        total_speed += seg->progress().speed_bps;
-        if (seg->state() == SegmentState::downloading) ++active;
+        max_speed = std::max(max_speed, static_cast<double>(seg->progress().speed_bps));
+        auto st = seg->state();
+        if (st == SegmentState::downloading || st == SegmentState::connecting) ++active;
+        else if (st == SegmentState::completed) ++completed;
+        else if (st == SegmentState::failed) ++failed;
     }
 
+    // Now hold lock ONLY to write aggregate progress struct
+    std::lock_guard<std::mutex> lock(mutex_);
     progress_.downloaded_bytes = total_downloaded;
-    progress_.speed_bps = total_speed;
+    progress_.speed_bps = max_speed;
     progress_.active_segments = active;
-    progress_.last_update = std::chrono::steady_clock::now();
-
+    progress_.completed_segments = completed;
+    progress_.failed_segments = failed;
     if (progress_.total_bytes > 0) {
         progress_.percent = static_cast<double>(total_downloaded) * 100.0
-                          / static_cast<double>(progress_.total_bytes);
+                            / static_cast<double>(progress_.total_bytes);
     }
-
-    // Calculate average speed
-    auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
-        progress_.last_update - progress_.start_time).count();
-    if (elapsed > 0) {
-        progress_.average_speed_bps = total_downloaded / elapsed;
-    }
-
+    progress_.last_update = std::chrono::steady_clock::now();
     calculate_eta();
+    // Lock released here
+
+    // Call callback AFTER releasing lock (no deadlock possible)
+    if (callback_) {
+        callback_(progress_);
+    }
 }
 
 void DownloadEngine::calculate_eta() noexcept {
@@ -346,10 +369,23 @@ void DownloadEngine::reset() noexcept {
 }
 
 void DownloadEngine::stop_download() noexcept {
+    // 1. Cancel all segments (stops curl transfers)
+    for (auto& seg : segments_) {
+        if (seg) seg->cancel();
+    }
+
+    // 2. Stop and join download thread BEFORE closing file
     if (download_thread_.joinable()) {
         download_thread_.request_stop();
         download_thread_.join();
     }
+
+    // 3. Close file (no writers remain)
+    if (file_writer_.is_open()) {
+        file_writer_.flush();
+        file_writer_.close();
+    }
+
     state_.store(DownloadState::paused, std::memory_order_release);
 }
 

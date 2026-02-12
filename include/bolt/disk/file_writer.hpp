@@ -8,18 +8,12 @@
 #include <vector>
 #include <expected>
 #include <mutex>
-#include <memory>
+#include <atomic>
 
 namespace bolt::disk {
 
 // Write buffer size for coalescing
-constexpr std::size_t WRITE_BUFFER_SIZE = 256 * 1024;  // 256 KB
-
-// Write operation queue entry
-struct WriteOp {
-    std::uint64_t file_offset;
-    std::vector<std::byte> data;
-};
+constexpr std::size_t WRITE_BUFFER_SIZE = 256 * 1024; // 256 KB
 
 // Thread-safe file writer for concurrent segment writes
 class FileWriter {
@@ -36,8 +30,8 @@ public:
 
     // Queue async write
     void write_async(std::uint64_t offset,
-                     std::vector<std::byte> data,
-                     std::function<void(std::error_code)> callback) noexcept;
+                              std::vector<std::byte> data,
+                              std::function<void(std::error_code)> callback) noexcept;
 
     // Flush all pending writes
     [[nodiscard]] std::error_code flush() noexcept;
@@ -45,13 +39,16 @@ public:
     // Close file
     void close() noexcept;
 
+    // Check if file is open
     [[nodiscard]] bool is_open() const noexcept { return file_ != nullptr; }
+
+    // Get file path
     [[nodiscard]] const std::string& path() const noexcept { return path_; }
 
 private:
     std::unique_ptr<AsyncFile> file_;
     std::string path_;
-    std::mutex mutex_;
+    std::atomic<bool> closed_{false};  // Guard against double-close
 };
 
 // RAII buffer for segment data

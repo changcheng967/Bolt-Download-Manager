@@ -7,8 +7,7 @@
 namespace bolt::core {
 
 std::expected<Url, std::error_code> Url::parse(std::string_view url_str) noexcept {
-    Url url;
-    url.str_ = url_str;
+    Url url(std::string(url_str));  // Store a copy of the input string
 
     // Parse scheme
     auto scheme_end = url_str.find("://");
@@ -16,14 +15,13 @@ std::expected<Url, std::error_code> Url::parse(std::string_view url_str) noexcep
         return std::unexpected(make_error_code(DownloadErrc::invalid_url));
     }
 
-    url.scheme_ = url_str.substr(0, scheme_end);
-    // Convert scheme to lowercase
+    // Convert scheme to lowercase and store
     std::string lower_scheme;
-    lower_scheme.reserve(url.scheme_.size());
-    for (char c : url.scheme_) {
-        lower_scheme += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    lower_scheme.reserve(scheme_end);
+    for (std::size_t i = 0; i < scheme_end; ++i) {
+        lower_scheme += static_cast<char>(std::tolower(static_cast<unsigned char>(url_str[i])));
     }
-    url.scheme_ = lower_scheme;
+    url.scheme_ = std::move(lower_scheme);
 
     auto rest_start = scheme_end + 3; // Skip "://"
 
@@ -43,10 +41,10 @@ std::expected<Url, std::error_code> Url::parse(std::string_view url_str) noexcep
     if (at_pos != std::string_view::npos && at_pos < host_end) {
         if (colon_pos > at_pos) {
             // Port is after @, like user@host:port
-            url.host_ = url_str.substr(at_pos + 1, colon_pos - at_pos - 1);
+            url.host_ = std::string(url_str.substr(at_pos + 1, colon_pos - at_pos - 1));
             auto bracket_pos = url_str.find(']', at_pos);
             if (bracket_pos != std::string_view::npos) {
-                url.host_ = url_str.substr(at_pos + 1, bracket_pos - at_pos);
+                url.host_ = std::string(url_str.substr(at_pos + 1, bracket_pos - at_pos));
             }
         }
     }
@@ -54,15 +52,15 @@ std::expected<Url, std::error_code> Url::parse(std::string_view url_str) noexcep
     // Extract host (before port or path)
     if (url.host_.empty()) {
         if (colon_pos != std::string_view::npos && colon_pos < host_end) {
-            url.host_ = url_str.substr(rest_start, colon_pos - rest_start);
+            url.host_ = std::string(url_str.substr(rest_start, colon_pos - rest_start));
             auto port_end = std::min({url_str.find('/', colon_pos), url_str.find('?', colon_pos), host_end});
-            url.port_ = url_str.substr(colon_pos + 1, port_end - colon_pos - 1);
+            url.port_ = std::string(url_str.substr(colon_pos + 1, port_end - colon_pos - 1));
         }
 
         if (url.host_.empty()) {
             auto bracket_end = url_str.find(']', rest_start);
             if (bracket_end != std::string_view::npos && bracket_end < host_end) {
-                url.host_ = url_str.substr(bracket_end + 1, host_end - bracket_end - 1);
+                url.host_ = std::string(url_str.substr(bracket_end + 1, host_end - bracket_end - 1));
             }
         }
     }
@@ -79,16 +77,16 @@ std::expected<Url, std::error_code> Url::parse(std::string_view url_str) noexcep
     if (query_pos != std::string_view::npos && query_pos < url_str.length()) {
         auto frag_pos = url_str.find('#', query_pos + 1);
         if (frag_pos != std::string_view::npos) {
-            url.query_ = url_str.substr(query_pos + 1, frag_pos - query_pos - 1);
+            url.query_ = std::string(url_str.substr(query_pos + 1, frag_pos - query_pos - 1));
         } else {
-            url.query_ = url_str.substr(query_pos + 1);
+            url.query_ = std::string(url_str.substr(query_pos + 1));
         }
     }
 
     // Parse fragment
     auto frag_pos = url_str.find('#', path_start);
     if (frag_pos != std::string_view::npos && frag_pos < url_str.length()) {
-        url.fragment_ = url_str.substr(frag_pos + 1);
+        url.fragment_ = std::string(url_str.substr(frag_pos + 1));
     }
 
     return url;
@@ -141,7 +139,7 @@ std::uint16_t Url::default_port() const noexcept {
 }
 
 std::string Url::filename() const {
-    std::string path(path_);  // Make a copy to avoid dangling pointer
+    std::string path = path_;  // Copy since path_ is now std::string
 
     // Remove query string if present
     auto query_pos = path.find('?');

@@ -4,7 +4,6 @@
 
 #include <bolt/core/error.hpp>
 #include <string>
-#include <string_view>
 #include <utility>
 #include <expected>
 
@@ -14,12 +13,12 @@ class Url {
 public:
     static std::expected<Url, std::error_code> parse(std::string_view url_str) noexcept;
 
-    [[nodiscard]] std::string_view scheme() const noexcept { return scheme_; }
-    [[nodiscard]] std::string_view host() const noexcept { return host_; }
-    [[nodiscard]] std::string_view port() const noexcept { return port_; }
-    [[nodiscard]] std::string_view path() const noexcept { return path_; }
-    [[nodiscard]] std::string_view query() const noexcept { return query_; }
-    [[nodiscard]] std::string_view fragment() const noexcept { return fragment_; }
+    [[nodiscard]] const std::string& scheme() const noexcept { return scheme_; }
+    [[nodiscard]] const std::string& host() const noexcept { return host_; }
+    [[nodiscard]] const std::string& port() const noexcept { return port_; }
+    [[nodiscard]] const std::string& path() const noexcept { return path_; }
+    [[nodiscard]] const std::string& query() const noexcept { return query_; }
+    [[nodiscard]] const std::string& fragment() const noexcept { return fragment_; }
 
     [[nodiscard]] std::string full() const;
     [[nodiscard]] std::string base() const;  // scheme://host[:port]
@@ -33,12 +32,12 @@ public:
 
 private:
     std::string str_;
-    std::string_view scheme_;
-    std::string_view host_;
-    std::string_view port_;
-    std::string_view path_;
-    std::string_view query_;
-    std::string_view fragment_;
+    std::string scheme_;
+    std::string host_;
+    std::string port_;
+    std::string path_;
+    std::string query_;
+    std::string fragment_;
 };
 
 } // namespace bolt::core

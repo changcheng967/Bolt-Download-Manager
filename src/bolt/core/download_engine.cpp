@@ -64,13 +64,9 @@ std::error_code DownloadEngine::prepare() noexcept {
         output_path_ = filename_;
     }
 
-    // Probe bandwidth
-    prober_ = std::make_unique<BandwidthProber>(url_);
-    auto bandwidth = prober_->probe();
-    if (!bandwidth) {
-        // Use default bandwidth on probe failure
-        bandwidth = 10'000'000; // 10 MB/s default
-    }
+    // Probe bandwidth - disabled for now, use hardcoded value
+    // TODO: Implement proper bandwidth probing
+    std::uint64_t bandwidth = 10'000'000; // 10 MB/s default
 
     seg_calculator_ = std::make_unique<SegmentCalculator>(file_size_);
 
@@ -81,7 +77,7 @@ std::error_code DownloadEngine::prepare() noexcept {
         return open_result;
     }
 
-    create_segments(*bandwidth);
+    create_segments(bandwidth);
 
     progress_.total_bytes = file_size_;
     progress_.start_time = std::chrono::steady_clock::now();

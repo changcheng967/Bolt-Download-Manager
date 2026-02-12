@@ -13,8 +13,8 @@ BandwidthProber::BandwidthProber(Url target_url)
     : url_(std::move(target_url)) {}
 
 BandwidthProber::ProbeResult BandwidthProber::probe(std::uint32_t duration_ms) noexcept {
-    if (!url_.full().empty()) {
-        // URL-based probe not implemented yet - requires libcurl
+    if (url_.str_.empty()) {
+        // No URL set - return error
         return std::unexpected(make_error_code(DownloadErrc::no_bandwidth));
     }
 

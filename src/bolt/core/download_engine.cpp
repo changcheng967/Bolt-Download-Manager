@@ -95,6 +95,24 @@ std::error_code DownloadEngine::prepare() noexcept {
 
     seg_calculator_ = std::make_unique<SegmentCalculator>(file_size_);
 
+    // Check for existing partial download to resume
+    bool resuming = false;
+    if (DownloadMeta::exists(output_path_)) {
+        auto meta_result = DownloadMeta::load(DownloadMeta::meta_path(output_path_));
+        if (meta_result && meta_result->url == url_.full() && meta_result->file_size == file_size_) {
+            // Valid resume - restore segments with progress
+            resuming = true;
+            total_downloaded_.store(meta_result->total_downloaded, std::memory_order_relaxed);
+
+            for (const auto& sm : meta_result->segments) {
+                auto seg = std::make_unique<Segment>(sm.id, url_, sm.offset, sm.size, sm.file_offset);
+                seg->file_writer(&file_writer_);
+                seg->set_downloaded(sm.downloaded);  // Resume from where we left off
+                segments_.push_back(std::move(seg));
+            }
+        }
+    }
+
     // Open output file for writing (0 size means grow as needed)
     auto open_result = file_writer_.open(output_path_, file_size_);
     if (open_result) {
@@ -102,7 +120,10 @@ std::error_code DownloadEngine::prepare() noexcept {
         return open_result;
     }
 
-    create_segments(bandwidth);
+    // If not resuming, create new segments
+    if (!resuming) {
+        create_segments(bandwidth);
+    }
 
     progress_.total_bytes = file_size_;
     progress_.start_time = std::chrono::steady_clock::now();

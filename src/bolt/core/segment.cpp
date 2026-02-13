@@ -134,8 +134,20 @@ std::error_code Segment::start() noexcept {
             std::string url_str = url_.full();
             curl_easy_setopt(curl, CURLOPT_URL, url_str.c_str());
 
-            // Set range header
-            std::string range = std::to_string(offset_) + "-" + std::to_string(offset_ + size_ - 1);
+            // Set range header - resume from where we left off
+            std::uint64_t downloaded = atomic_downloaded_.load(std::memory_order_relaxed);
+            std::uint64_t start_byte = offset_ + downloaded;
+            std::uint64_t end_byte = offset_ + size_ - 1;
+
+            if (start_byte > end_byte) {
+                // Already fully downloaded
+                state(SegmentState::completed);
+                curl_easy_cleanup(curl);
+                curl_handle_ = nullptr;
+                return;
+            }
+
+            std::string range = std::to_string(start_byte) + "-" + std::to_string(end_byte);
             curl_easy_setopt(curl, CURLOPT_RANGE, range.c_str());
 
             // Set callbacks

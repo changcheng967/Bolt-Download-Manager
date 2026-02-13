@@ -95,6 +95,12 @@ public:
     // Update downloaded bytes (called by write callback)
     void add_downloaded(std::uint64_t bytes) noexcept;
 
+    // Set initial downloaded bytes (for resume)
+    void set_downloaded(std::uint64_t bytes) noexcept {
+        atomic_downloaded_.store(bytes, std::memory_order_relaxed);
+        atomic_write_offset_.store(bytes, std::memory_order_relaxed);
+    }
+
     // Set file writer for writing downloaded data
     void file_writer(bolt::disk::FileWriter* writer) noexcept { file_writer_ = writer; }
     [[nodiscard]] bolt::disk::FileWriter* file_writer() const noexcept { return file_writer_; }

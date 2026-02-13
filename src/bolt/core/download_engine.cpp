@@ -173,6 +173,8 @@ void DownloadEngine::pause() noexcept {
     auto current = state_.load(std::memory_order_acquire);
     if (current == DownloadState::downloading) {
         state_.store(DownloadState::paused, std::memory_order_release);
+        // Save metadata before stopping
+        (void)save_meta();
         download_thread_.request_stop();
     }
 }
@@ -255,6 +257,12 @@ void DownloadEngine::download_loop(std::stop_token stoken) noexcept {
         }
     }
 
+    // Save initial metadata
+    (void)save_meta();
+
+    auto last_meta_save = std::chrono::steady_clock::now();
+    constexpr auto META_SAVE_INTERVAL = 5s;  // Save metadata every 5 seconds
+
     // Monitor progress
     while (!stoken.stop_requested() && state() == DownloadState::downloading) {
         update_progress();
@@ -277,6 +285,8 @@ void DownloadEngine::download_loop(std::stop_token stoken) noexcept {
         if (completed == segments_.size()) {
             state_.store(DownloadState::completed, std::memory_order_release);
             update_progress();  // Final callback after releasing lock
+            // Delete metadata on successful completion
+            delete_meta();
             break;
         }
 
@@ -284,6 +294,13 @@ void DownloadEngine::download_loop(std::stop_token stoken) noexcept {
             state_.store(DownloadState::failed, std::memory_order_release);
             update_progress();  // Final callback after releasing lock
             break;
+        }
+
+        // Save metadata periodically
+        auto now = std::chrono::steady_clock::now();
+        if (now - last_meta_save >= META_SAVE_INTERVAL) {
+            (void)save_meta();
+            last_meta_save = now;
         }
 
         std::this_thread::sleep_for(BANDWIDTH_SAMPLE_INTERVAL);
@@ -504,6 +521,40 @@ std::vector<std::uint32_t> DownloadManager::downloads() const noexcept {
         result.push_back(id);
     }
     return result;
+}
+
+//=============================================================================
+// Metadata Persistence
+//=============================================================================
+
+std::error_code DownloadEngine::save_meta() const noexcept {
+    if (output_path_.empty() || url_.full().empty()) {
+        return {};
+    }
+
+    DownloadMeta meta;
+    meta.url = url_.full();
+    meta.output_path = output_path_;
+    meta.file_size = file_size_;
+    meta.total_downloaded = total_downloaded_.load(std::memory_order_relaxed);
+
+    for (const auto& seg : segments_) {
+        SegmentMeta sm;
+        sm.id = seg->id();
+        sm.offset = seg->offset();
+        sm.size = seg->size();
+        sm.file_offset = seg->file_offset();
+        sm.downloaded = seg->downloaded();
+        meta.segments.push_back(sm);
+    }
+
+    return meta.save(DownloadMeta::meta_path(output_path_));
+}
+
+void DownloadEngine::delete_meta() const noexcept {
+    if (!output_path_.empty()) {
+        DownloadMeta::remove(output_path_);
+    }
 }
 
 } // namespace bolt::core

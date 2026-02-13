@@ -7,6 +7,7 @@
 #include <bolt/core/segment.hpp>
 #include <bolt/core/http_session.hpp>
 #include <bolt/core/bandwidth_prober.hpp>
+#include <bolt/core/download_meta.hpp>
 #include <bolt/disk/file_writer.hpp>
 #include <cstdint>
 #include <string>
@@ -157,6 +158,10 @@ private:
 
     // Stop the download thread
     void stop_download() noexcept;
+
+    // Metadata persistence for resume
+    [[nodiscard]] std::error_code save_meta() const noexcept;
+    void delete_meta() const noexcept;
 
     Url url_;
     std::string output_path_;

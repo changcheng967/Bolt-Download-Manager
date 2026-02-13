@@ -85,9 +85,13 @@ std::error_code DownloadEngine::prepare() noexcept {
         supports_ranges_ = false;
     }
 
-    // Probe bandwidth - disabled for now, use hardcoded value
-    // TODO: Implement proper bandwidth probing
-    std::uint64_t bandwidth = 10'000'000; // 10 MB/s default
+    // Probe bandwidth by downloading first 512KB
+    std::uint64_t bandwidth = 10'000'000; // 10 MB/s default fallback
+    BandwidthProber prober(url_);
+    auto probe_result = prober.probe(2000);  // 2 second probe
+    if (probe_result) {
+        bandwidth = *probe_result;
+    }
 
     seg_calculator_ = std::make_unique<SegmentCalculator>(file_size_);
 

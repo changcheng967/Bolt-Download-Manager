@@ -38,12 +38,14 @@ AsyncFile::open(std::string_view path, std::uint64_t size) noexcept {
     AsyncFile file;
     file.path_ = path;
 
-    // Convert to Windows path
-    std::wstring wpath;
-    wpath.reserve(path.size());
-    for (char c : path) {
-        wpath += static_cast<wchar_t>(c);
+    // Convert to Windows path (UTF-8 to UTF-16)
+    int wpath_len = MultiByteToWideChar(CP_UTF8, 0, path.data(), static_cast<int>(path.size()), nullptr, 0);
+    if (wpath_len <= 0) {
+        return std::unexpected(win32_error_to_error_code(GetLastError()));
     }
+    std::wstring wpath;
+    wpath.resize(wpath_len);
+    MultiByteToWideChar(CP_UTF8, 0, path.data(), static_cast<int>(path.size()), wpath.data(), wpath_len);
 
     // Create file for async write
     DWORD flags = FILE_FLAG_OVERLAPPED | FILE_FLAG_SEQUENTIAL_SCAN;
@@ -65,7 +67,7 @@ AsyncFile::open(std::string_view path, std::uint64_t size) noexcept {
     // Pre-allocate if size specified
     if (size > 0) {
         auto result = file.pre_allocate(size);
-        if (!result) {
+        if (result) {
             file.close();
             return std::unexpected(result);
         }
@@ -137,6 +139,10 @@ void AsyncFile::async_read(std::uint64_t offset,
 
 std::expected<std::size_t, std::error_code>
 AsyncFile::write(std::uint64_t offset, const void* data, std::size_t size) noexcept {
+    if (handle_ == INVALID_HANDLE_VALUE) {
+        return std::unexpected(make_error_code(DiskErrc::handle_invalid));
+    }
+
     LARGE_INTEGER li;
     li.QuadPart = static_cast<LONGLONG>(offset);
 
@@ -212,11 +218,14 @@ MappedFile::create(std::string_view path, std::uint64_t size) noexcept {
     mf.path_ = path;
     mf.size_ = size;
 
-    std::wstring wpath;
-    wpath.reserve(path.size());
-    for (char c : path) {
-        wpath += static_cast<wchar_t>(c);
+    // Convert to Windows path (UTF-8 to UTF-16)
+    int wpath_len = MultiByteToWideChar(CP_UTF8, 0, path.data(), static_cast<int>(path.size()), nullptr, 0);
+    if (wpath_len <= 0) {
+        return std::unexpected(win32_error_to_error_code(GetLastError()));
     }
+    std::wstring wpath;
+    wpath.resize(wpath_len);
+    MultiByteToWideChar(CP_UTF8, 0, path.data(), static_cast<int>(path.size()), wpath.data(), wpath_len);
 
     // Create file
     mf.file_ = CreateFileW(

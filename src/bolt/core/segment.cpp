@@ -23,6 +23,8 @@ std::size_t write_callback(char* ptr, std::size_t size, std::size_t nmemb, void*
             // Write failed - return 0 to abort the download
             return 0;
         }
+    } else {
+        return 0;
     }
 
     // Update progress using atomics (no mutex - no deadlock possible)
@@ -170,14 +172,28 @@ std::error_code Segment::start() noexcept {
             state(SegmentState::downloading);
 
             auto result = curl_easy_perform(curl);
+
+            // Get HTTP code BEFORE cleanup (only valid if curl succeeded)
+            long http_code = 0;
+            if (result == CURLE_OK) {
+                curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+            }
+
+            // ALWAYS clean up curl handle immediately after perform
+            curl_easy_cleanup(curl);
+            curl_handle_ = nullptr;
+
+            // Handle cancellation (not an error)
+            if (result == CURLE_ABORTED_BY_CALLBACK) {
+                return;  // Cancelled via progress callback - not a failure
+            }
+
             if (result != CURLE_OK) {
+                fprintf(stderr, "Segment %u: curl error %d: %s\n", id_, result, curl_easy_strerror(result));
                 state(SegmentState::failed);
                 error_ = make_error_code(DownloadErrc::network_error);
                 return;
             }
-
-            long http_code = 0;
-            curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
 
             if (http_code >= 400) {
                 state(SegmentState::failed);
@@ -190,10 +206,6 @@ std::error_code Segment::start() noexcept {
                 }
                 return;
             }
-
-            // Clean up curl handle
-            curl_easy_cleanup(curl);
-            curl_handle_ = nullptr;
 
             state(SegmentState::completed);
         } catch (...) {
@@ -217,8 +229,6 @@ std::error_code Segment::resume() noexcept {
 }
 
 void Segment::cancel() noexcept {
-    state(SegmentState::cancelled);
-
     // Signal curl to abort via progress callback
     stop_requested_.store(true, std::memory_order_release);
 
@@ -233,6 +243,11 @@ void Segment::cancel() noexcept {
         curl_easy_cleanup(static_cast<CURL*>(curl_handle_));
         curl_handle_ = nullptr;
     }
+
+    // Set cancelled state AFTER thread is done and cleanup is complete
+    // This allows segments to naturally complete (failed or success) before
+    // being marked as cancelled, which is important for restart scenarios.
+    state(SegmentState::cancelled);
 }
 
 bool Segment::is_stalled(std::chrono::seconds timeout) const noexcept {

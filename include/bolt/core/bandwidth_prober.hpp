@@ -4,6 +4,7 @@
 
 #include <bolt/core/error.hpp>
 #include <bolt/core/url.hpp>
+#include <bolt/core/config.hpp>
 #include <cstdint>
 #include <chrono>
 #include <atomic>
@@ -64,13 +65,6 @@ private:
     static constexpr std::uint64_t HIGH_BANDWIDTH_THRESHOLD = 100'000'000; // 100 MB/s
     static constexpr std::uint64_t LOW_BANDWIDTH_THRESHOLD = 1'000'000;      // 1 MB/s
     static constexpr double SPEED_VARIANCE_THRESHOLD = 0.5;                 // 50% difference
-
-    // Segment configuration
-    static constexpr std::uint32_t MIN_SEGMENTS = 2;
-    static constexpr std::uint32_t MAX_SEGMENTS = 16;
-    static constexpr std::uint64_t DEFAULT_SEGMENT_SIZE = 5'000'000;    // 5 MB
-    static constexpr std::uint64_t MIN_SEGMENT_SIZE = 256'000;            // 256 KB
-    static constexpr std::uint64_t MAX_SEGMENT_SIZE = 50'000'000;            // 50 MB
 };
 
 } // namespace bolt::core

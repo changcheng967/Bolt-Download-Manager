@@ -10,22 +10,20 @@ namespace bolt::disk {
 //=============================================================================
 
 std::error_code FileWriter::open(std::string_view path, std::uint64_t size) noexcept {
-    // Check if already open
-    bool expected = false;
-    if (closed_.load(std::memory_order_acquire)) {
+    // Check if already open (closed_ == false means file is open)
+    if (!closed_.load(std::memory_order_acquire)) {
         return make_error_code(DiskErrc::file_exists);
     }
 
     path_ = path;
 
     auto file = AsyncFile::open(path, size);
-    if (!file) {
-        return file.error();
+    if (file) {
+        file_ = std::make_unique<AsyncFile>(std::move(*file));
+        closed_.store(false, std::memory_order_release);
+        return {};
     }
-
-    file_ = std::make_unique<AsyncFile>(std::move(*file));
-    closed_.store(false, std::memory_order_release);
-    return {};
+    return file.error();
 }
 
 std::error_code FileWriter::write(std::uint64_t offset,
@@ -67,7 +65,7 @@ void FileWriter::close() noexcept {
     }
 
     if (file_) {
-        file_->flush();
+        (void)file_->flush();
         file_->close();
         file_.reset();
     }

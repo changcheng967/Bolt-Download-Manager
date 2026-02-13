@@ -160,9 +160,14 @@ std::string Url::filename() const {
     // Find the last '/' in path and extract filename
     auto last_slash = path_.rfind('/');
     if (last_slash == std::string::npos) {
-        return path_;
+        return path_.empty() ? "index.html" : path_;
     }
-    return path_.substr(last_slash + 1);
+    auto filename = path_.substr(last_slash + 1);
+    // For directory URLs (path ends with /), default to index.html
+    if (filename.empty()) {
+        return "index.html";
+    }
+    return filename;
 }
 
 } // namespace bolt::core

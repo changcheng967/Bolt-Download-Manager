@@ -3,7 +3,6 @@
 #include <bolt/core/download_engine.hpp>
 #include <bolt/core/config.hpp>
 #include <algorithm>
-#include <format>
 
 namespace bolt::core {
 
@@ -35,7 +34,7 @@ DownloadEngine::~DownloadEngine() {
 
     // 3. All threads are now done. Safe to close file.
     if (file_writer_.is_open()) {
-        file_writer_.flush();
+        (void)file_writer_.flush();
         file_writer_.close();
     }
 }
@@ -139,7 +138,13 @@ void DownloadEngine::create_segments(std::uint64_t bandwidth_bps) noexcept {
 }
 
 std::error_code DownloadEngine::start() noexcept {
-    if (state() != DownloadState::idle && state() != DownloadState::paused) {
+    // Only allow starting if not already downloading, completed, failed, or cancelled
+    DownloadState current_state = state();
+
+    if (current_state == DownloadState::downloading ||
+        current_state == DownloadState::completed ||
+        current_state == DownloadState::failed ||
+        current_state == DownloadState::cancelled) {
         return make_error_code(DownloadErrc::network_error);
     }
 
@@ -178,7 +183,7 @@ std::error_code DownloadEngine::resume() noexcept {
     // Restart stalled segments
     for (auto& seg : segments_) {
         if (seg->state() == SegmentState::stalled) {
-            seg->resume();
+            (void)seg->resume();
         }
     }
 
@@ -213,7 +218,7 @@ void DownloadEngine::cancel() noexcept {
 
     // 4. Close file (all threads now done)
     if (file_writer_.is_open()) {
-        file_writer_.flush();
+        (void)file_writer_.flush();
         file_writer_.close();
     }
 }
@@ -242,7 +247,7 @@ void DownloadEngine::download_loop(std::stop_token stoken) noexcept {
     // Start all segments
     for (auto& seg : segments_) {
         if (seg->state() == SegmentState::pending) {
-            seg->start();
+            (void)seg->start();
         }
     }
 
@@ -336,29 +341,33 @@ void DownloadEngine::update_progress() noexcept {
         else if (st == SegmentState::failed) ++failed;
     }
 
-    // Now hold lock ONLY to write aggregate progress struct
-    std::lock_guard<std::mutex> lock(mutex_);
-    progress_.downloaded_bytes = total_downloaded;
-    progress_.speed_bps = max_speed;
-    progress_.active_segments = active;
-    progress_.completed_segments = completed;
-    progress_.failed_segments = failed;
-    if (progress_.total_bytes > 0) {
-        progress_.percent = static_cast<double>(total_downloaded) * 100.0
-                            / static_cast<double>(progress_.total_bytes);
+    // Now hold lock ONLY to write aggregate progress struct and make snapshot
+    DownloadProgress snap;
+    DownloadCallback cb;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        progress_.downloaded_bytes = total_downloaded;
+        progress_.speed_bps = max_speed;
+        progress_.active_segments = active;
+        progress_.completed_segments = completed;
+        progress_.failed_segments = failed;
+        if (progress_.total_bytes > 0) {
+            progress_.percent = static_cast<double>(total_downloaded) * 100.0
+                                / static_cast<double>(progress_.total_bytes);
+        }
+        progress_.last_update = std::chrono::steady_clock::now();
+        calculate_eta();
+        snap = progress_;  // Copy under lock for callback
     }
-    progress_.last_update = std::chrono::steady_clock::now();
-    calculate_eta();
     // Lock released here
 
-    // Call callback AFTER releasing lock (copy under lock first)
-    DownloadCallback cb;
+    // Call callback with snapshot (copy under separate lock)
     {
         std::lock_guard<std::mutex> cb_lock(callback_mutex_);
         cb = callback_;
     }
     if (cb) {
-        cb(progress_);
+        try { cb(snap); } catch (...) {}
     }
 }
 
@@ -394,7 +403,7 @@ void DownloadEngine::stop_download() noexcept {
 
     // 3. Close file (all threads now done)
     if (file_writer_.is_open()) {
-        file_writer_.flush();
+        (void)file_writer_.flush();
         file_writer_.close();
     }
 

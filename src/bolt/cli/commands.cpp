@@ -124,15 +124,14 @@ CliResult download(const std::string& url,
     // Setup progress bar
     ProgressBar bar(0, "Downloading");
     if (!quiet) {
-        engine->callback([&](const DownloadProgress& p) {
+        engine->callback([&bar, verbose](const DownloadProgress& p) {
             bar.total(p.total_bytes);
             bar.update(p.downloaded_bytes, p.speed_bps);
 
             if (verbose) {
-                auto progress = engine->progress();
-                std::cout << "Active: " << progress.active_segments
-                         << " Completed: " << progress.completed_segments
-                         << " Speed: " << progress.speed_bps << std::endl;
+                std::cout << "Active: " << p.active_segments
+                         << " Completed: " << p.completed_segments
+                         << " Speed: " << p.speed_bps << std::endl;
             }
         });
     }

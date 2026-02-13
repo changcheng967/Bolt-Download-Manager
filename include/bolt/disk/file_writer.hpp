@@ -48,7 +48,7 @@ public:
 private:
     std::unique_ptr<AsyncFile> file_;
     std::string path_;
-    std::atomic<bool> closed_{false};  // Guard against double-close
+    std::atomic<bool> closed_{true};  // Start closed (not opened yet), guard against double-close
 };
 
 // RAII buffer for segment data

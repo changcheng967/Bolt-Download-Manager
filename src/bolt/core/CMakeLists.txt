@@ -4,6 +4,7 @@ add_library(bolt_core STATIC)
 
 target_sources(bolt_core PRIVATE
     download_engine.cpp
+    download_meta.cpp
     http_session.cpp
     segment.cpp
     bandwidth_prober.cpp

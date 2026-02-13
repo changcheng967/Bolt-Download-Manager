@@ -245,6 +245,9 @@ std::error_code Segment::resume() noexcept {
         progress_.last_update = std::chrono::steady_clock::now();
         progress_.start_time = progress_.last_update;
 
+        // Set state to pending before calling start() - start() expects pending state
+        state(SegmentState::pending);
+
         // Restart from where we left off
         return start();
     }

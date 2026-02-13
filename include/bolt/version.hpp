@@ -10,7 +10,7 @@ namespace bolt {
 
 constexpr struct Version {
     std::uint32_t major = 0;
-    std::uint32_t minor = 1;
+    std::uint32_t minor = 2;
     std::uint32_t patch = 0;
 
     constexpr auto operator<=>(const Version&) const = default;

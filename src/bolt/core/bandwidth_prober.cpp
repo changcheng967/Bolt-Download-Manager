@@ -3,9 +3,30 @@
 #include <bolt/core/bandwidth_prober.hpp>
 #include <curl/curl.h>
 #include <thread>
+#include <chrono>
 #include <algorithm>
 
 namespace bolt::core {
+
+namespace {
+
+// Write callback that discards data (we only care about speed measurement)
+std::size_t discard_callback(char* ptr, std::size_t size, std::size_t nmemb, void* userdata) noexcept {
+    auto* total = static_cast<std::uint64_t*>(userdata);
+    std::size_t bytes = size * nmemb;
+    *total += bytes;
+    return bytes;
+}
+
+// Progress callback to check cancellation
+int probe_progress_callback(void* userdata, curl_off_t dltotal, curl_off_t dlnow,
+                            curl_off_t ultotal, curl_off_t ulnow) noexcept {
+    (void)dltotal; (void)dlnow; (void)ultotal; (void)ulnow;
+    auto* cancelled = static_cast<std::atomic<bool>*>(userdata);
+    return cancelled->load(std::memory_order_relaxed) ? 1 : 0;
+}
+
+} // namespace
 
 BandwidthProber::BandwidthProber() = default;
 
@@ -14,19 +35,59 @@ BandwidthProber::BandwidthProber(Url target_url)
 
 BandwidthProber::ProbeResult BandwidthProber::probe(std::uint32_t duration_ms) noexcept {
     if (url_.full().empty()) {
-        // No URL set - return error
         return std::unexpected(make_error_code(DownloadErrc::no_bandwidth));
     }
 
-    // Simple local probe - should be replaced with actual HTTP probe
     probing_.store(true, std::memory_order_release);
     cancelled_.store(false, std::memory_order_release);
 
-    // Simulate measurement - in real implementation, download first ~1MB
-    // and measure time taken
-    std::uint64_t bandwidth = 10'000'000; // 10 MB/s default
-    last_bandwidth_.store(bandwidth, std::memory_order_relaxed);
+    CURL* curl = curl_easy_init();
+    if (!curl) {
+        probing_.store(false, std::memory_order_release);
+        return std::unexpected(make_error_code(DownloadErrc::network_error));
+    }
 
+    // Set up curl for bandwidth probing
+    std::uint64_t bytes_downloaded = 0;
+    curl_easy_setopt(curl, CURLOPT_URL, url_.full().c_str());
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, discard_callback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &bytes_downloaded);
+    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, probe_progress_callback);
+    curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &cancelled_);
+    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 10L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);  // 10 second max
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 5L);
+
+    // Download only first 512KB for speed measurement
+    curl_easy_setopt(curl, CURLOPT_RANGE, "0-524287");
+
+    auto start_time = std::chrono::steady_clock::now();
+    CURLcode res = curl_easy_perform(curl);
+    auto end_time = std::chrono::steady_clock::now();
+
+    curl_easy_cleanup(curl);
+
+    if (res != CURLE_OK && res != CURLE_WRITE_ERROR) {
+        probing_.store(false, std::memory_order_release);
+        return std::unexpected(make_error_code(DownloadErrc::network_error));
+    }
+
+    // Calculate bandwidth
+    auto duration_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end_time - start_time).count();
+    std::uint64_t bandwidth = 0;
+    if (duration_ns > 0 && bytes_downloaded > 0) {
+        // bandwidth = (bytes * 1e9) / nanoseconds = bytes/second
+        bandwidth = (bytes_downloaded * 1'000'000'000ULL) / static_cast<std::uint64_t>(duration_ns);
+    }
+
+    // If bandwidth is unreasonably low, use a minimum default
+    if (bandwidth < 100'000) {  // < 100 KB/s
+        bandwidth = 1'000'000;  // Default to 1 MB/s
+    }
+
+    last_bandwidth_.store(bandwidth, std::memory_order_relaxed);
     probing_.store(false, std::memory_order_release);
     return bandwidth;
 }

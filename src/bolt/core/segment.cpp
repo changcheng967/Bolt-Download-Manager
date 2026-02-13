@@ -223,7 +223,30 @@ void Segment::pause() noexcept {
 
 std::error_code Segment::resume() noexcept {
     if (state() == SegmentState::stalled) {
-        return start(); // Restart stalled segment
+        // Stop the stalled transfer first
+        stop_requested_.store(true, std::memory_order_release);
+
+        // Wait for the old thread to finish
+        if (segment_thread_.joinable()) {
+            segment_thread_.request_stop();
+            segment_thread_.join();
+        }
+
+        // Clean up curl handle if still present
+        if (curl_handle_) {
+            curl_easy_cleanup(static_cast<CURL*>(curl_handle_));
+            curl_handle_ = nullptr;
+        }
+
+        // Reset stop flag for new transfer
+        stop_requested_.store(false, std::memory_order_release);
+
+        // Reset progress tracking for the restart
+        progress_.last_update = std::chrono::steady_clock::now();
+        progress_.start_time = progress_.last_update;
+
+        // Restart from where we left off
+        return start();
     }
     return {};
 }

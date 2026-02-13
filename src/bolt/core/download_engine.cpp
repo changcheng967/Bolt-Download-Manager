@@ -292,7 +292,8 @@ void DownloadEngine::monitor_segments() noexcept {
     for (auto& seg : segments_) {
         if (seg->is_stalled(std::chrono::seconds{STALL_TIMEOUT_SEC})) {
             seg->state(SegmentState::stalled);
-            // TODO: Restart stalled segment
+            // Auto-restart stalled segment
+            (void)seg->resume();
         }
     }
 }

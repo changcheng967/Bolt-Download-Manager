@@ -112,21 +112,21 @@ SegmentCalculator::SegmentCalculator(std::uint64_t file_size) noexcept
     : file_size_(file_size) {}
 
 std::uint32_t SegmentCalculator::optimal_segments(std::uint64_t bandwidth_bps) const noexcept {
-    // For very high bandwidth, use fewer but larger segments
+    // For very high bandwidth, use MORE segments to saturate the connection
     if (bandwidth_bps >= HIGH_BANDWIDTH_THRESHOLD) {
-        return MIN_SEGMENTS;
-    }
-
-    // For low bandwidth, use more segments to parallelize
-    if (bandwidth_bps <= LOW_BANDWIDTH_THRESHOLD) {
         return MAX_SEGMENTS;
     }
 
-    // Linear interpolation between min and max
+    // For low bandwidth, use fewer segments to reduce overhead
+    if (bandwidth_bps <= LOW_BANDWIDTH_THRESHOLD) {
+        return MIN_SEGMENTS;
+    }
+
+    // Linear interpolation: more bandwidth = more segments
     double ratio = static_cast<double>(bandwidth_bps - LOW_BANDWIDTH_THRESHOLD)
                  / (HIGH_BANDWIDTH_THRESHOLD - LOW_BANDWIDTH_THRESHOLD);
     return MIN_SEGMENTS + static_cast<std::uint32_t>(
-        (MAX_SEGMENTS - MIN_SEGMENTS) * (1.0 - ratio));
+        (MAX_SEGMENTS - MIN_SEGMENTS) * ratio);
 }
 
 std::uint64_t SegmentCalculator::optimal_segment_size(std::uint32_t segment_count) const noexcept {

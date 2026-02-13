@@ -9,16 +9,16 @@ using namespace bolt::core;
 TEST_CASE("SegmentCalculator::optimal_segments", "[bandwidth]") {
     SegmentCalculator calc(100'000'000);  // 100 MB file
 
-    SECTION("High bandwidth - fewer segments") {
+    SECTION("High bandwidth - more segments to saturate") {
         std::uint64_t high_bandwidth = 200'000'000;  // 200 MB/s
         std::uint32_t segs = calc.optimal_segments(high_bandwidth);
-        CHECK(segs == MIN_SEGMENTS);
+        CHECK(segs == MAX_SEGMENTS);
     }
 
-    SECTION("Low bandwidth - more segments") {
+    SECTION("Low bandwidth - fewer segments to reduce overhead") {
         std::uint64_t low_bandwidth = 500'000;  // 500 KB/s
         std::uint32_t segs = calc.optimal_segments(low_bandwidth);
-        CHECK(segs == MAX_SEGMENTS);
+        CHECK(segs == MIN_SEGMENTS);
     }
 
     SECTION("Medium bandwidth - balanced") {

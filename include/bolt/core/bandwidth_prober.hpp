@@ -62,9 +62,9 @@ public:
 
 private:
     std::uint64_t file_size_;
-    static constexpr std::uint64_t HIGH_BANDWIDTH_THRESHOLD = 100'000'000; // 100 MB/s
+    static constexpr std::uint64_t HIGH_BANDWIDTH_THRESHOLD = 50'000'000;  // 50 MB/s
     static constexpr std::uint64_t LOW_BANDWIDTH_THRESHOLD = 1'000'000;      // 1 MB/s
-    static constexpr double SPEED_VARIANCE_THRESHOLD = 0.5;                 // 50% difference
+    static constexpr double SPEED_VARIANCE_THRESHOLD = 0.3;                 // 30% difference
 };
 
 } // namespace bolt::core

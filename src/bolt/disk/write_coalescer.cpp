@@ -58,6 +58,9 @@ void WriteCoalescer::enqueue(std::uint64_t offset,
 std::error_code WriteCoalescer::flush(AsyncFile& file) noexcept {
     auto lock = std::lock_guard(mutex_);
 
+    // Merge adjacent/overlapping writes before flushing
+    merge_writes();
+
     for (auto& [offset, write] : pending_) {
         auto result = file.write(write.offset, write.data.data(), write.data.size());
         if (!result) {
@@ -84,6 +87,53 @@ std::uint64_t WriteCoalescer::pending_bytes() const noexcept {
 std::size_t WriteCoalescer::pending_count() const noexcept {
     auto lock = std::lock_guard(mutex_);
     return pending_.size();
+}
+
+void WriteCoalescer::merge_writes() noexcept {
+    // Already holding lock from caller (flush)
+    if (pending_.size() < 2) return;
+
+    // Iterate through and merge adjacent/overlapping writes
+    auto it = pending_.begin();
+    while (it != pending_.end()) {
+        auto next = std::next(it);
+        if (next == pending_.end()) break;
+
+        std::uint64_t it_end = it->first + it->second.data.size();
+        std::uint64_t next_start = next->first;
+
+        // Check if adjacent or overlapping
+        if (it_end >= next_start) {
+            // Merge next into current
+            std::uint64_t merged_end = std::max(it_end, next_start + next->second.data.size());
+            std::size_t new_size = static_cast<std::size_t>(merged_end - it->first);
+
+            // Expand current buffer
+            std::vector<std::byte> merged;
+            merged.reserve(new_size);
+            merged.insert(merged.end(), it->second.data.begin(), it->second.data.end());
+
+            // If there's a gap, fill with zeros (shouldn't happen with proper enqueue)
+            if (it_end < next_start) {
+                merged.resize(next_start - it->first, std::byte{0});
+            }
+
+            // Append next data
+            merged.insert(merged.end(), next->second.data.begin(), next->second.data.end());
+
+            total_pending_ -= it->second.data.size();
+            total_pending_ -= next->second.data.size();
+
+            it->second.data = std::move(merged);
+            total_pending_ += it->second.data.size();
+
+            // Erase next and continue checking from current position
+            pending_.erase(next);
+            // Don't advance it - check if we can merge more
+        } else {
+            ++it;
+        }
+    }
 }
 
 } // namespace bolt::disk

@@ -1,0 +1,3 @@
+timestamp,version,test_url,file_size_mb,segments,duration_sec,speed_kbps,speed_mbps,change_description,improvement_pct
+2026-02-14T16:30,0.2.0,https://testfileorg.netwet.net/500MB-CZIPtestfile.org.zip,500,8,10.1,37600,37.6,speed_calc_fix+tcp_nodelay+buffer,baseline
+2026-02-14T16:45,0.2.0,https://testfileorg.netwet.net/500MB-CZIPtestfile.org.zip,500,8,14.4,34700,34.7,with_retry_logic_complete,0

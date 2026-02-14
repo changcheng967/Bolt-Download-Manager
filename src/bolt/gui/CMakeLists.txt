@@ -62,3 +62,12 @@ endif()
 set_target_properties(boltdm_gui PROPERTIES
     OUTPUT_NAME "BoltDM"
 )
+
+# Run windeployqt after build to copy Qt dependencies
+find_program(WINDEPLOYQT_EXE windeployqt HINTS "${Qt6_DIR}/../../../bin")
+if(WINDEPLOYQT_EXE)
+    add_custom_command(TARGET boltdm_gui POST_BUILD
+        COMMAND "${WINDEPLOYQT_EXE}" --no-compiler-runtime "$<TARGET_FILE:boltdm_gui>"
+        COMMENT "Running windeployqt to copy Qt dependencies..."
+    )
+endif()

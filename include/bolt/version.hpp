@@ -10,8 +10,8 @@ namespace bolt {
 
 constexpr struct Version {
     std::uint32_t major = 0;
-    std::uint32_t minor = 2;
-    std::uint32_t patch = 1;  // Speed fix: increased segment count for large files
+    std::uint32_t minor = 3;
+    std::uint32_t patch = 0;  // Dynamic segmentation, GUI, browser integration
 
     constexpr auto operator<=>(const Version&) const = default;
 

@@ -2,23 +2,26 @@
 
 A high-performance download accelerator for Windows 11 that fully saturates your network bandwidth. Built with C++23.
 
-**Current Version: 0.2.1**
+**Current Version: 0.3.0**
 
 ## Features
 
 ### Implemented
-- **Multi-segment downloads** — Splits files into 4-32 parallel segments for maximum speed
-- **Real bandwidth probing** — Measures actual connection speed and optimizes segment count
+- **Dynamic segmentation** — Automatically splits large segments when connections free up, keeping all connections busy
+- **Multi-segment downloads** — Starts with 16 segments, grows to 32 as needed
 - **Work stealing** — Fast segments automatically steal work from slow ones
 - **Stalled segment recovery** — Auto-detects and restarts stalled downloads
 - **Resume support** — Saves progress to `.boltmeta` files, recovers interrupted downloads
 - **HTTP/2 support** — Uses HTTP/2 with libcurl for efficient connections
 - **Windows async I/O** — Overlapped file writes with pre-allocation
 - **CLI interface** — Full-featured command-line downloader with progress bar
+- **Qt 6 GUI** — Modern dark-themed interface with per-segment progress
+- **Browser integration** — Chrome/Firefox extension to intercept downloads
 
 ### In Progress
-- Qt 6 GUI with per-segment progress visualization
-- Browser integration (Chrome/Firefox)
+- Download queue management
+- Clipboard URL monitoring
+- Speed limiter
 - HLS/DASH streaming video grabber
 
 ## Building

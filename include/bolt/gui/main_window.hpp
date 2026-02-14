@@ -87,7 +87,7 @@ private:
     QPushButton* btn_remove_{nullptr};
 
     // Status bar
-    QLabel* status downloads_{nullptr};
+    QLabel* status_downloads_{nullptr};
     QLabel* status_speed_{nullptr};
     QLabel* status_active_{nullptr};
 

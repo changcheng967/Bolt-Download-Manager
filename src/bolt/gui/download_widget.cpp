@@ -128,6 +128,23 @@ void DownloadWidget::setup_ui() {
     connect(btn_pause_, &QPushButton::clicked, this, &DownloadWidget::pause);
     button_layout->addWidget(btn_pause_);
 
+    btn_resume_ = new QPushButton("Resume", this);
+    btn_resume_->setStyleSheet(R"(
+        QPushButton {
+            background-color: #2a7a5a;
+            border: none;
+            border-radius: 4px;
+            padding: 6px 16px;
+            color: #fff;
+            font-weight: 500;
+        }
+        QPushButton:hover { background-color: #3a8a6a; }
+        QPushButton:pressed { background-color: #1a6a4a; }
+    )");
+    btn_resume_->setEnabled(false);
+    connect(btn_resume_, &QPushButton::clicked, this, &DownloadWidget::resume);
+    button_layout->addWidget(btn_resume_);
+
     btn_cancel_ = new QPushButton("Cancel", this);
     btn_cancel_->setStyleSheet(R"(
         QPushButton {

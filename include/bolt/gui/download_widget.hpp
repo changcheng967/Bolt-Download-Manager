@@ -69,6 +69,7 @@ private:
     // Actions
     QPushButton* btn_start_{nullptr};
     QPushButton* btn_pause_{nullptr};
+    QPushButton* btn_resume_{nullptr};
     QPushButton* btn_cancel_{nullptr};
     QPushButton* btn_remove_{nullptr};
 

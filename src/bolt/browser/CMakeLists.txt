@@ -17,6 +17,7 @@ target_include_directories(boltdm_host PRIVATE
 
 target_link_libraries(boltdm_host PRIVATE
     bolt_core
+    bolt_disk
     nlohmann_json::nlohmann_json
 )
 
@@ -24,5 +25,4 @@ target_compile_features(boltdm_host PRIVATE cxx_std_23)
 
 if(MSVC)
     target_compile_definitions(boltdm_host PRIVATE _CRT_SECURE_NO_WARNINGS WIN32_LEAN_AND_MEAN NOMINMAX)
-    target_link_options(boltdm_host PRIVATE /SUBSYSTEM:WINDOWS)
 endif()

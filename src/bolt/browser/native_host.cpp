@@ -2,9 +2,11 @@
 
 #include <bolt/browser/native_host.hpp>
 #include <bolt/core/download_engine.hpp>
+#include <bolt/core/error.hpp>
 #include <nlohmann/json.hpp>
 #include <iostream>
-#include <windows.h>
+#include <io.h>
+#include <fcntl.h>
 
 namespace bolt::browser {
 
@@ -45,7 +47,7 @@ std::expected<DownloadRequest, std::error_code> parse_request(const nlohmann::js
 
         return req;
     } catch (const std::exception& e) {
-        return std::unexpected(make_error_code(core::DownloadErrc::invalid_url));
+        return std::unexpected(make_error_code(bolt::core::DownloadErrc::invalid_url));
     }
 }
 
@@ -60,7 +62,7 @@ int NativeHost::run() noexcept {
     _setmode(_fileno(stdin), _O_BINARY);
     _setmode(_fileno(stdout), _O_BINARY);
 
-    DownloadEngine::global_init();
+    bolt::core::DownloadEngine::global_init();
 
     // Main message loop
     while (true) {
@@ -78,7 +80,7 @@ int NativeHost::run() noexcept {
         }
     }
 
-    DownloadEngine::global_cleanup();
+    bolt::core::DownloadEngine::global_cleanup();
     return 0;
 }
 
@@ -100,7 +102,7 @@ NativeHost::process_message(const std::string& json) noexcept {
         return DownloadResponse{true, "Download added", *id};
 
     } catch (const std::exception& e) {
-        return std::unexpected(make_error_code(core::DownloadErrc::invalid_url));
+        return std::unexpected(make_error_code(bolt::core::DownloadErrc::invalid_url));
     }
 }
 

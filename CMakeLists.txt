@@ -45,6 +45,11 @@ add_subdirectory(src/bolt/cli)
 find_package(spdlog CONFIG QUIET)
 find_package(nlohmann_json CONFIG QUIET)
 
+# Browser native host (requires nlohmann_json)
+if(nlohmann_json_FOUND)
+    add_subdirectory(src/bolt/browser)
+endif()
+
 # Qt6 - check common installation paths
 if(NOT DEFINED CMAKE_PREFIX_PATH)
     set(CMAKE_PREFIX_PATH "C:/Qt/6.10.2/msvc2022_64")

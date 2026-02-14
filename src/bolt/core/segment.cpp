@@ -207,10 +207,74 @@ std::error_code Segment::start() noexcept {
             }
 
             if (result != CURLE_OK) {
-                fprintf(stderr, "Segment %u: curl error %d: %s\n", id_, result, curl_easy_strerror(result));
-                state(SegmentState::failed);
-                error_ = make_error_code(DownloadErrc::network_error);
-                return;
+                // Retry transient network errors up to 3 times
+                if (result == CURLE_RECV_ERROR || result == CURLE_COULDNT_CONNECT ||
+                    result == CURLE_OPERATION_TIMEDOUT || result == CURLE_SSL_CONNECT_ERROR) {
+                    int retries = 0;
+                    constexpr int MAX_RETRIES = 3;
+                    while (retries < MAX_RETRIES && !stop_requested_.load(std::memory_order_relaxed)) {
+                        std::this_thread::sleep_for(std::chrono::seconds(1));
+                        ++retries;
+                        fprintf(stderr, "Segment %u: retry %d/%d after error %d\n", id_, retries, MAX_RETRIES, result);
+
+                        // Re-create curl handle and retry
+                        curl = curl_easy_init();
+                        if (!curl) continue;
+                        curl_handle_ = curl;
+
+                        // Re-configure curl (same as above)
+                        curl_easy_setopt(curl, CURLOPT_URL, url_str.c_str());
+                        std::uint64_t downloaded = atomic_downloaded_.load(std::memory_order_relaxed);
+                        std::uint64_t start_byte = offset_ + downloaded;
+                        std::uint64_t end_byte = offset_ + size_ - 1;
+                        if (start_byte > end_byte) {
+                            curl_easy_cleanup(curl);
+                            curl_handle_ = nullptr;
+                            state(SegmentState::completed);
+                            return;
+                        }
+                        std::string range = std::to_string(start_byte) + "-" + std::to_string(end_byte);
+                        curl_easy_setopt(curl, CURLOPT_RANGE, range.c_str());
+                        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, reinterpret_cast<void*>(write_callback));
+                        curl_easy_setopt(curl, CURLOPT_WRITEDATA, this);
+                        curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, reinterpret_cast<void*>(progress_callback));
+                        curl_easy_setopt(curl, CURLOPT_XFERINFODATA, this);
+                        curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+                        curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, reinterpret_cast<void*>(header_callback));
+                        curl_easy_setopt(curl, CURLOPT_HEADERDATA, this);
+                        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, static_cast<long>(CONNECTION_TIMEOUT_SEC));
+                        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, static_cast<long>(STALL_TIMEOUT_SEC));
+                        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1L);
+                        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+                        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+                        if constexpr (FOLLOW_REDIRECTS) {
+                            curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+                            curl_easy_setopt(curl, CURLOPT_MAXREDIRS, static_cast<long>(MAX_REDIRECTS));
+                        }
+                        curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2TLS);
+                        curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, static_cast<long>(WRITE_BUFFER_SIZE));
+                        curl_easy_setopt(curl, CURLOPT_TCP_NODELAY, 1L);
+
+                        result = curl_easy_perform(curl);
+                        curl_easy_cleanup(curl);
+                        curl_handle_ = nullptr;
+
+                        if (result == CURLE_OK) {
+                            curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+                            break;
+                        }
+                        if (result == CURLE_ABORTED_BY_CALLBACK) {
+                            return;
+                        }
+                    }
+                }
+
+                if (result != CURLE_OK) {
+                    fprintf(stderr, "Segment %u: curl error %d: %s\n", id_, result, curl_easy_strerror(result));
+                    state(SegmentState::failed);
+                    error_ = make_error_code(DownloadErrc::network_error);
+                    return;
+                }
             }
 
             if (http_code >= 400) {

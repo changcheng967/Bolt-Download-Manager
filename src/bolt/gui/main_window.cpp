@@ -31,6 +31,7 @@
 #include <QStyleFactory>
 #include <QDir>
 #include <QTabWidget>
+#include <QStackedWidget>
 #include <QMimeData>
 #include <QDropEvent>
 
@@ -213,15 +214,17 @@ void MainWindow::setup_ui() {
     )");
     splitter->addWidget(tab_widget_);
 
-    // Add "Details" tab placeholder
-    auto* details_widget = new QWidget();
-    auto* details_layout = new QVBoxLayout(details_widget);
-    details_layout->addWidget(new QLabel("Select a download to view details"));
-    tab_widget_->addTab(details_widget, "Details");
+    // Add "Details" tab with QStackedWidget to show selected download
+    details_stack_ = new QStackedWidget(this);
+    auto* placeholder = new QLabel("Select a download to view details");
+    placeholder->setAlignment(Qt::AlignCenter);
+    placeholder->setStyleSheet("color: #666; font-size: 14px;");
+    details_stack_->addWidget(placeholder);  // Index 0 = placeholder
+    tab_widget_->addTab(details_stack_, "Details");
 
     // Add "Speed Graph" tab
-    auto* speed_graph = new SpeedGraph(this);
-    tab_widget_->addTab(speed_graph, "Speed Graph");
+    speed_graph_ = new SpeedGraph(this);
+    tab_widget_->addTab(speed_graph_, "Speed Graph");
 
     splitter->setStretchFactor(0, 0);
     splitter->setStretchFactor(1, 1);
@@ -590,7 +593,13 @@ void MainWindow::on_download_selected(QListWidgetItem* item) {
     auto id = item->data(Qt::UserRole).toUInt();
     auto* widget = get_download(id);
     if (widget) {
-        // Update details tab
+        // Show download widget in details stack
+        int idx = details_stack_->indexOf(widget);
+        if (idx == -1) {
+            // Not yet added, add it
+            idx = details_stack_->addWidget(widget);
+        }
+        details_stack_->setCurrentIndex(idx);
     }
 }
 

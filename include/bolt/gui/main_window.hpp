@@ -15,6 +15,8 @@ class QSystemTrayIcon;
 class QMenu;
 class QProgressBar;
 class QTabWidget;
+class QStackedWidget;
+class QTableWidget;
 
 namespace bolt::gui {
 
@@ -77,6 +79,8 @@ private:
     // UI Components
     QListWidget* download_list_{nullptr};
     QTabWidget* tab_widget_{nullptr};
+    QStackedWidget* details_stack_{nullptr};
+    SpeedGraph* speed_graph_{nullptr};
 
     // Action buttons
     QPushButton* btn_add_{nullptr};

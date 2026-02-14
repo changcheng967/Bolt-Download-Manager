@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Download with BoltDM</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            width: 100%;
+            height: 100vh;
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+            color: #fff;
+            overflow: hidden;
+        }
+        .container {
+            padding: 20px;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        .header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .logo {
+            width: 48px;
+            height: 48px;
+            background: #0078d4;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            margin-right: 15px;
+        }
+        .title {
+            font-size: 18px;
+            font-weight: 600;
+        }
+        .subtitle {
+            font-size: 12px;
+            color: #888;
+        }
+        .info-section {
+            background: rgba(255,255,255,0.05);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .info-row {
+            display: flex;
+            margin-bottom: 10px;
+        }
+        .info-row:last-child {
+            margin-bottom: 0;
+        }
+        .info-label {
+            width: 80px;
+            color: #888;
+            font-size: 12px;
+        }
+        .info-value {
+            flex: 1;
+            font-size: 13px;
+            word-break: break-all;
+        }
+        .filename-input {
+            width: 100%;
+            padding: 10px 12px;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 6px;
+            color: #fff;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        .filename-input:focus {
+            outline: none;
+            border-color: #0078d4;
+        }
+        .save-path {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .path-input {
+            flex: 1;
+            padding: 10px 12px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 6px;
+            color: #aaa;
+            font-size: 13px;
+        }
+        .browse-btn {
+            padding: 10px 20px;
+            background: #333;
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 6px;
+            color: #fff;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .browse-btn:hover {
+            background: #444;
+        }
+        .options {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: rgba(255,255,255,0.03);
+            border-radius: 6px;
+        }
+        .checkbox {
+            accent-color: #0078d4;
+        }
+        .buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: auto;
+        }
+        .btn {
+            flex: 1;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-download {
+            background: linear-gradient(135deg, #0078d4, #00a8ff);
+            color: #fff;
+        }
+        .btn-download:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px rgba(0,120,212,0.4);
+        }
+        .btn-cancel {
+            background: #333;
+            color: #aaa;
+        }
+        .btn-cancel:hover {
+            background: #444;
+            color: #fff;
+        }
+        .speed-info {
+            text-align: center;
+            font-size: 11px;
+            color: #666;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">B</div>
+            <div>
+                <div class="title">Download File</div>
+                <div class="subtitle">Bolt Download Manager</div>
+            </div>
+        </div>
+
+        <div class="info-section">
+            <div class="info-row">
+                <div class="info-label">File name:</div>
+                <div class="info-value" id="filenameDisplay">-</div>
+            </div>
+            <div class="info-row">
+                <div class="info-label">Size:</div>
+                <div class="info-value" id="fileSize">Unknown</div>
+            </div>
+            <div class="info-row">
+                <div class="info-label">URL:</div>
+                <div class="info-value" id="urlDisplay" style="color: #0078d4; font-size: 11px;">-</div>
+            </div>
+        </div>
+
+        <label style="font-size: 12px; color: #888; margin-bottom: 5px;">Save as:</label>
+        <input type="text" class="filename-input" id="filenameInput" placeholder="filename.ext">
+
+        <label style="font-size: 12px; color: #888; margin-bottom: 5px;">Save to:</label>
+        <div class="save-path">
+            <input type="text" class="path-input" id="savePath" value="C:\Users\chang\Downloads" readonly>
+            <button class="browse-btn" id="browseBtn">Browse...</button>
+        </div>
+
+        <div class="options">
+            <input type="checkbox" class="checkbox" id="startImmediately" checked>
+            <label for="startImmediately" style="font-size: 13px;">Start download immediately</label>
+        </div>
+
+        <div class="buttons">
+            <button class="btn btn-cancel" id="cancelBtn">Cancel</button>
+            <button class="btn btn-download" id="downloadBtn">Download</button>
+        </div>
+
+        <div class="speed-info">BoltDM uses 16 parallel segments for maximum speed</div>
+    </div>
+
+    <script src="dialog.js"></script>
+</body>
+</html>

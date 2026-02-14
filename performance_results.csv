@@ -2,3 +2,4 @@ timestamp,version,test_url,file_size_mb,segments,duration_sec,speed_kbps,speed_m
 2026-02-14T16:30,0.2.0,https://testfileorg.netwet.net/500MB-CZIPtestfile.org.zip,500,8,10.1,37600,37.6,speed_calc_fix+tcp_nodelay+buffer,baseline
 2026-02-14T16:45,0.2.0,https://testfileorg.netwet.net/500MB-CZIPtestfile.org.zip,500,8,14.4,34700,34.7,with_retry_logic_complete,0
 2026-02-14T17:00,0.2.0,https://testfileorg.netwet.net/500MB-CZIPtestfile.org.zip,500,8,13.0,38300,38.3,consistency_test_peak_181mbps,10.4
+2026-02-14T17:30,0.2.0,https://testfileorg.netwet.net/500MB-CZIPtestfile.org.zip,500,8,20.1,24900,24.9,no_probe_smart_segments_server_rate_limiting,-35

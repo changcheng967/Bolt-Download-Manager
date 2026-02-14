@@ -101,14 +101,19 @@ cli/browser/gui → core → disk
 - **bolt::browser** — Native Messaging host
 - **bolt::media** — HLS/DASH parsing
 
-## Performance
+## Performance Comparison (500MB File)
 
-BoltDM is designed to maximize bandwidth utilization:
-- Up to 32 parallel segments
-- Adaptive segment sizing based on measured bandwidth
-- Work stealing to balance load across segments
-- Stalled segment auto-recovery
-- Pre-allocated files with async overlapped I/O
+| Tool | Time | Avg Speed | Peak Speed |
+|------|------|-----------|------------|
+| BOLTDM | 19.7s | 25.4 MB/s | 158.5 MB/s |
+| IDM* | 12.2s | 41.1 MB/s | 55.0 MB/s |
+| BROWSER | 236.3s | 2.1 MB/s | - |
+
+*IDM measured manually under identical conditions
+
+![Benchmark Results](docs/benchmark.png)
+
+BoltDM achieves up to **158.5 MB/s peak speed** with multi-segment downloads, work stealing, and async overlapped I/O.
 
 ## License
 

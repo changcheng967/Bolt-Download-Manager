@@ -1,0 +1,4 @@
+Tool,Time (s),Avg Speed (MB/s),Peak Speed (MB/s),Notes
+boltdm,19.66,25.44,158.50,
+idm,12.15,41.15,55.00,manual measurement
+browser,236.25,2.12,N/A,

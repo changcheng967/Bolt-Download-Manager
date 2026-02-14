@@ -139,11 +139,8 @@ CliResult download(const std::string& url,
     if (segments > 0) {
         config.max_segments = segments;
         config.min_segments = std::min(segments, 2u);
-    } else {
-        config.max_segments = 2;
-        config.min_segments = 2;
-        config.auto_segment = true;
     }
+    // If segments == 0, use engine's smart defaults (don't override)
     engine->config(config);
 
     // Setup progress bar

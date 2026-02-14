@@ -145,12 +145,16 @@ void DownloadEngine::create_segments(std::uint64_t /*bandwidth_bps*/) noexcept {
     // Smart defaults based on file size - zero startup delay
     // Adaptive adjustment happens during download based on actual speed
     std::uint32_t seg_count;
-    if (file_size_ >= 50 * 1024 * 1024) {        // > 50 MB
-        seg_count = 8;
+    if (file_size_ >= 100 * 1024 * 1024) {        // > 100 MB - high bandwidth saturation
+        seg_count = 16;
+    } else if (file_size_ >= 50 * 1024 * 1024) { // > 50 MB
+        seg_count = 12;
     } else if (file_size_ >= 10 * 1024 * 1024) { // > 10 MB
+        seg_count = 6;
+    } else if (file_size_ >= 1024 * 1024) {      // > 1 MB
         seg_count = 4;
     } else {
-        seg_count = 1;  // Small files don't need multiple segments
+        seg_count = 2;  // Small files - still parallel for reliability
     }
 
     std::uint64_t seg_size = (file_size_ + seg_count - 1) / seg_count;  // Round up

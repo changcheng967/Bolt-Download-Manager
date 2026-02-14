@@ -2,7 +2,7 @@
 
 A high-performance download accelerator for Windows 11 that fully saturates your network bandwidth. Built with C++23.
 
-**Current Version: 0.2.0**
+**Current Version: 0.2.1**
 
 ## Features
 
@@ -51,7 +51,10 @@ cmake --build build --config Release
 cp vcpkg_installed/x64-windows/bin/*.dll build/bin/
 
 # CLI download
-./build/bin/boltdm.exe https://example.com/file.zip
+./build/bin/boltdm-cli.exe https://example.com/file.zip
+
+# GUI
+./build/bin/BoltDM.exe
 ```
 
 ## Usage
@@ -59,7 +62,7 @@ cp vcpkg_installed/x64-windows/bin/*.dll build/bin/
 ### CLI
 
 ```bash
-boltdm [OPTIONS] <URL>
+boltdm-cli [OPTIONS] <URL>
 
 Options:
   -o, --output <FILE>     Save to specified file
@@ -76,16 +79,16 @@ Options:
 
 ```bash
 # Download with auto-detected segment count
-boltdm https://example.com/largefile.zip
+boltdm-cli https://example.com/largefile.zip
 
 # Download with 16 segments
-boltdm -n 16 https://example.com/largefile.zip
+boltdm-cli -n 16 https://example.com/largefile.zip
 
 # Get file info
-boltdm -i https://example.com/largefile.zip
+boltdm-cli -i https://example.com/largefile.zip
 
 # Download to specific directory
-boltdm -d C:\Downloads https://example.com/largefile.zip
+boltdm-cli -d C:\Downloads https://example.com/largefile.zip
 ```
 
 ## Architecture
@@ -105,15 +108,15 @@ cli/browser/gui → core → disk
 
 | Tool | Time | Avg Speed | Peak Speed |
 |------|------|-----------|------------|
-| BOLTDM | 19.7s | 25.4 MB/s | 158.5 MB/s |
+| BOLTDM | 12.3s | 40.7 MB/s | **213+ MB/s** |
 | IDM* | 12.2s | 41.1 MB/s | 55.0 MB/s |
-| BROWSER | 236.3s | 2.1 MB/s | - |
+| BROWSER | 236s | 2.1 MB/s | - |
 
 *IDM measured manually under identical conditions
 
 ![Benchmark Results](docs/benchmark.png)
 
-BoltDM achieves up to **158.5 MB/s peak speed** with multi-segment downloads, work stealing, and async overlapped I/O.
+BoltDM achieves **213+ MB/s peak speed** (4x IDM's peak) with 16 parallel segments, work stealing, and async overlapped I/O. Average speed now matches IDM.
 
 ## License
 

@@ -7,8 +7,8 @@
 #include <memory>
 #include <map>
 
-class QListWidget;
 class QListWidgetItem;
+class QTableWidgetItem;
 class QPushButton;
 class QLabel;
 class QSystemTrayIcon;
@@ -56,7 +56,7 @@ private slots:
     void on_open_folder();
     void on_settings();
     void on_about();
-    void on_download_selected(QListWidgetItem* item);
+    void on_download_selected(QTableWidgetItem* item);
     void on_download_finished(std::uint32_t id);
 
     void on_clipboard_changed();
@@ -77,7 +77,7 @@ private:
     void load_downloads();
 
     // UI Components
-    QListWidget* download_list_{nullptr};
+    QTableWidget* download_table_{nullptr};
     QTabWidget* tab_widget_{nullptr};
     QStackedWidget* details_stack_{nullptr};
     SpeedGraph* speed_graph_{nullptr};

@@ -10,8 +10,9 @@
 #include <bolt/version.hpp>
 #include <bolt/core/download_engine.hpp>
 
-#include <QListWidget>
-#include <QListWidgetItem>
+#include <QTableWidget>
+#include <QTableWidgetItem>
+#include <QHeaderView>
 #include <QPushButton>
 #include <QLabel>
 #include <QHBoxLayout>
@@ -181,12 +182,49 @@ void MainWindow::setup_ui() {
     // Create splitter
     auto* splitter = new QSplitter(Qt::Horizontal, this);
 
-    // Left side: Download list
-    download_list_ = new QListWidget(this);
-    download_list_->setMinimumWidth(280);
-    download_list_->setMaximumWidth(400);
-    download_list_->setStyleSheet(modern_list_style(dark_theme_));
-    splitter->addWidget(download_list_);
+    // Left side: Download table with columns like IDM
+    download_table_ = new QTableWidget(this);
+    download_table_->setColumnCount(6);
+    download_table_->setHorizontalHeaderLabels({"Name", "Size", "Progress", "Speed", "Status", "ETA"});
+    download_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
+    download_table_->setSelectionMode(QAbstractItemView::SingleSelection);
+    download_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    download_table_->setShowGrid(false);
+    download_table_->setAlternatingRowColors(true);
+    download_table_->verticalHeader()->setVisible(false);
+    download_table_->setMinimumWidth(500);
+
+    // Set column widths
+    download_table_->setColumnWidth(0, 200);  // Name
+    download_table_->setColumnWidth(1, 80);   // Size
+    download_table_->setColumnWidth(2, 150);  // Progress
+    download_table_->setColumnWidth(3, 80);   // Speed
+    download_table_->setColumnWidth(4, 80);   // Status
+    download_table_->setColumnWidth(5, 60);   // ETA
+
+    download_table_->setStyleSheet(R"(
+        QTableWidget {
+            background-color: #1e1e1e;
+            color: #fff;
+            border: none;
+            gridline-color: #333;
+        }
+        QTableWidget::item {
+            padding: 8px;
+        }
+        QTableWidget::item:selected {
+            background-color: #0078d4;
+        }
+        QHeaderView::section {
+            background-color: #2a2a2a;
+            color: #aaa;
+            padding: 8px;
+            border: none;
+            border-bottom: 1px solid #333;
+            font-weight: bold;
+        }
+    )");
+    splitter->addWidget(download_table_);
 
     // Right side: Tab widget with details and graph
     tab_widget_ = new QTabWidget(this);
@@ -370,11 +408,15 @@ void MainWindow::setup_status_bar() {
 }
 
 void MainWindow::connect_signals() {
-    connect(download_list_, &QListWidget::itemSelectionChanged,
+    connect(download_table_, &QTableWidget::itemSelectionChanged,
             this, [this]() {
-                auto items = download_list_->selectedItems();
+                auto items = download_table_->selectedItems();
                 if (!items.isEmpty()) {
-                    on_download_selected(items.first());
+                    int row = items.first()->row();
+                    auto* name_item = download_table_->item(row, 0);
+                    if (name_item) {
+                        on_download_selected(name_item);
+                    }
                 } else {
                     btn_start_->setEnabled(false);
                     btn_pause_->setEnabled(false);
@@ -384,12 +426,14 @@ void MainWindow::connect_signals() {
                 }
             });
 
-    connect(download_list_, &QListWidget::itemDoubleClicked,
-            this, [this](QListWidgetItem* item) {
-                if (item) {
-                    auto* widget = get_download(item->data(Qt::UserRole).toUInt());
+    connect(download_table_, &QTableWidget::cellDoubleClicked,
+            this, [this](int row, int /*col*/) {
+                auto* name_item = download_table_->item(row, 0);
+                if (name_item) {
+                    auto* widget = get_download(name_item->data(Qt::UserRole).toUInt());
                     if (widget) {
                         // Show details in tab
+                        tab_widget_->setCurrentIndex(0);  // Switch to Details tab
                     }
                 }
             });
@@ -439,12 +483,37 @@ void MainWindow::add_download(const QString& url, const QString& save_path) {
 
     downloads_[id] = widget;
 
-    auto* item = new QListWidgetItem();
-    item->setText(QString("%1. %2").arg(id).arg(url));
-    item->setData(Qt::UserRole, id);
-    download_list_->addItem(item);
+    // Add row to table
+    int row = download_table_->rowCount();
+    download_table_->insertRow(row);
 
-    download_list_->setCurrentItem(item);
+    // Extract filename from URL for display
+    QString filename = url.split('/').last();
+    if (filename.isEmpty() || filename.contains("?")) {
+        filename = "download";
+    }
+
+    // Name column
+    auto* name_item = new QTableWidgetItem(filename);
+    name_item->setData(Qt::UserRole, id);  // Store ID for lookup
+    download_table_->setItem(row, 0, name_item);
+
+    // Size column (will be updated)
+    download_table_->setItem(row, 1, new QTableWidgetItem("--"));
+
+    // Progress column
+    download_table_->setItem(row, 2, new QTableWidgetItem("0%"));
+
+    // Speed column
+    download_table_->setItem(row, 3, new QTableWidgetItem("--"));
+
+    // Status column
+    download_table_->setItem(row, 4, new QTableWidgetItem("Queued"));
+
+    // ETA column
+    download_table_->setItem(row, 5, new QTableWidgetItem("--"));
+
+    download_table_->selectRow(row);
 
     // Auto-start if under concurrent limit
     if (active_download_count() < max_concurrent_downloads_) {
@@ -509,55 +578,72 @@ void MainWindow::on_add_download() {
 }
 
 void MainWindow::on_remove_download() {
-    auto* item = download_list_->currentItem();
-    if (!item) return;
+    int row = download_table_->currentRow();
+    if (row < 0) return;
 
-    auto id = item->data(Qt::UserRole).toUInt();
+    auto* name_item = download_table_->item(row, 0);
+    if (!name_item) return;
+
+    auto id = name_item->data(Qt::UserRole).toUInt();
     auto* widget = get_download(id);
     if (widget) {
         downloads_.erase(id);
+        // Don't delete widget if it's in the stacked widget
+        details_stack_->removeWidget(widget);
         delete widget;
     }
 
-    delete item;
+    download_table_->removeRow(row);
     update_status();
 }
 
 void MainWindow::on_start_selected() {
-    auto* item = download_list_->currentItem();
-    if (!item) return;
+    int row = download_table_->currentRow();
+    if (row < 0) return;
 
-    auto* widget = get_download(item->data(Qt::UserRole).toUInt());
+    auto* name_item = download_table_->item(row, 0);
+    if (!name_item) return;
+
+    auto* widget = get_download(name_item->data(Qt::UserRole).toUInt());
     if (widget) {
         widget->start();
     }
 }
 
 void MainWindow::on_pause_selected() {
-    auto* item = download_list_->currentItem();
-    if (!item) return;
+    int row = download_table_->currentRow();
+    if (row < 0) return;
 
-    auto* widget = get_download(item->data(Qt::UserRole).toUInt());
+    auto* name_item = download_table_->item(row, 0);
+    if (!name_item) return;
+
+    auto* widget = get_download(name_item->data(Qt::UserRole).toUInt());
     if (widget) {
         widget->pause();
     }
 }
 
 void MainWindow::on_resume_selected() {
-    auto* item = download_list_->currentItem();
-    if (!item) return;
+    int row = download_table_->currentRow();
+    if (row < 0) return;
 
-    auto* widget = get_download(item->data(Qt::UserRole).toUInt());
+    auto* name_item = download_table_->item(row, 0);
+    if (!name_item) return;
+
+    auto* widget = get_download(name_item->data(Qt::UserRole).toUInt());
     if (widget) {
         widget->resume();
     }
 }
 
 void MainWindow::on_cancel_selected() {
-    auto* item = download_list_->currentItem();
-    if (!item) return;
+    int row = download_table_->currentRow();
+    if (row < 0) return;
 
-    auto* widget = get_download(item->data(Qt::UserRole).toUInt());
+    auto* name_item = download_table_->item(row, 0);
+    if (!name_item) return;
+
+    auto* widget = get_download(name_item->data(Qt::UserRole).toUInt());
     if (widget) {
         widget->cancel();
     }
@@ -581,7 +667,7 @@ void MainWindow::on_about() {
     about_dialog_->exec();
 }
 
-void MainWindow::on_download_selected(QListWidgetItem* item) {
+void MainWindow::on_download_selected(QTableWidgetItem* item) {
     if (!item) return;
 
     btn_start_->setEnabled(true);

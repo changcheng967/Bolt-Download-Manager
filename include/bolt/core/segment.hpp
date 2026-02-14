@@ -128,6 +128,7 @@ private:
     // Atomic counters for thread-safe updates from callback (no mutex needed)
     std::atomic<std::uint64_t> atomic_downloaded_{0};
     std::atomic<std::uint64_t> atomic_write_offset_{0};
+    std::atomic<std::uint64_t> atomic_speed_bytes_{0};  // Accumulated bytes for speed calc
 
     void* curl_handle_{nullptr};  // CURL* handle
     bolt::disk::FileWriter* file_writer_{nullptr};  // File writer for saving data

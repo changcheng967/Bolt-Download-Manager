@@ -181,6 +181,12 @@ std::error_code Segment::start() noexcept {
             // HTTP/2
             curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2TLS);
 
+            // Buffer sizes for better throughput
+            curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, static_cast<long>(WRITE_BUFFER_SIZE));
+
+            // TCP optimizations - disable Nagle's algorithm for lower latency
+            curl_easy_setopt(curl, CURLOPT_TCP_NODELAY, 1L);
+
             state(SegmentState::downloading);
 
             auto result = curl_easy_perform(curl);
@@ -334,6 +340,9 @@ void Segment::add_downloaded(std::uint64_t bytes) noexcept {
     atomic_downloaded_.fetch_add(bytes, std::memory_order_relaxed);
     atomic_write_offset_.fetch_add(bytes, std::memory_order_relaxed);
 
+    // Accumulate bytes for instantaneous speed calculation
+    atomic_speed_bytes_.fetch_add(bytes, std::memory_order_relaxed);
+
     // Calculate time delta from last update for instantaneous speed
     auto delta_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
         now - progress_.last_update).count();
@@ -347,11 +356,12 @@ void Segment::add_downloaded(std::uint64_t bytes) noexcept {
             (static_cast<double>(downloaded) * 1000.0) / total_elapsed_ms);
     }
 
-    // Instantaneous speed: bytes since last update / time since last update
+    // Instantaneous speed: accumulated bytes since last update / time since last update
     // Use a small minimum window (100ms) to avoid spikes
     if (delta_ms >= 100) {
+        auto accumulated_bytes = atomic_speed_bytes_.exchange(0, std::memory_order_relaxed);
         progress_.speed_bps = static_cast<std::uint64_t>(
-            (static_cast<double>(bytes) * 1000.0) / delta_ms);
+            (static_cast<double>(accumulated_bytes) * 1000.0) / delta_ms);
         progress_.last_update = now;
     }
 }

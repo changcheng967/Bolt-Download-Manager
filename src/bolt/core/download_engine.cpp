@@ -372,12 +372,12 @@ void DownloadEngine::attempt_work_stealing() noexcept {
 void DownloadEngine::update_progress() noexcept {
     // Gather segment data WITHOUT holding lock (atomics are lock-free)
     std::uint64_t total_downloaded = 0;
-    double max_speed = 0.0;
+    std::uint64_t total_speed = 0;  // Sum of all segment speeds
     int active = 0, completed = 0, failed = 0;
 
     for (auto& seg : segments_) {
         total_downloaded += seg->downloaded();
-        max_speed = std::max(max_speed, static_cast<double>(seg->progress().speed_bps));
+        total_speed += seg->progress().speed_bps;  // Sum speeds, not max
         auto st = seg->state();
         if (st == SegmentState::downloading || st == SegmentState::connecting) ++active;
         else if (st == SegmentState::completed) ++completed;
@@ -390,7 +390,7 @@ void DownloadEngine::update_progress() noexcept {
     {
         std::lock_guard<std::mutex> lock(mutex_);
         progress_.downloaded_bytes = total_downloaded;
-        progress_.speed_bps = max_speed;
+        progress_.speed_bps = total_speed;  // Use total (sum of all segments)
         progress_.active_segments = active;
         progress_.completed_segments = completed;
         progress_.failed_segments = failed;

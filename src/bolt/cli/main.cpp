@@ -75,7 +75,7 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        auto result = download(url, output, args.segments, args.verbose, args.quiet);
+        auto result = download(url, output, args.output_dir, args.segments, args.verbose, args.quiet);
         if (!result) {
             exit_code = 1;
         }

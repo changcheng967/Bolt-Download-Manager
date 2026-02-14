@@ -83,6 +83,7 @@ CliArgs parse_args(int argc, char* argv[]) noexcept {
 
 CliResult download(const std::string& url,
                    const std::string& output,
+                   const std::string& output_dir,
                    std::uint32_t segments,
                    bool verbose,
                    bool quiet) noexcept {
@@ -100,10 +101,36 @@ CliResult download(const std::string& url,
         return std::unexpected(result.error());
     }
 
-    if (!output.empty()) {
-        engine->output_path(output);
+    // Build final output path from output file and directory
+    std::string final_output = output;
+    if (!output_dir.empty() && !final_output.empty()) {
+        // Combine directory and filename
+        if (output_dir.back() == '/' || output_dir.back() == '\\') {
+            final_output = output_dir + final_output;
+        } else {
+            final_output = output_dir + "/" + final_output;
+        }
+    } else if (!output_dir.empty() && final_output.empty()) {
+        // Directory specified but no filename - will use URL filename
+        // The engine will extract filename from URL, we just need to set directory context
+        // For now, we'll pass the directory and let the engine know
+        // Actually we need to set a combined path - let's get the filename from URL
+        auto parsed = bolt::core::Url::parse(url);
+        if (parsed) {
+            std::string filename = std::string(parsed->filename());
+            if (filename.empty()) filename = "download";
+            if (output_dir.back() == '/' || output_dir.back() == '\\') {
+                final_output = output_dir + filename;
+            } else {
+                final_output = output_dir + "/" + filename;
+            }
+        }
+    }
+
+    if (!final_output.empty()) {
+        engine->output_path(final_output);
         if (verbose) {
-            std::cout << "Output path: " << output << std::endl;
+            std::cout << "Output path: " << final_output << std::endl;
         }
     }
 

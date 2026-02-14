@@ -31,6 +31,7 @@ struct CliArgs {
 // Download a single URL
 [[nodiscard]] CliResult download(const std::string& url,
                                   const std::string& output,
+                                  const std::string& output_dir,
                                   std::uint32_t segments,
                                   bool verbose,
                                   bool quiet) noexcept;

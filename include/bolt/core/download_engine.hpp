@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <bolt/core/config.hpp>
 #include <bolt/core/error.hpp>
 #include <bolt/core/url.hpp>
 #include <bolt/core/segment.hpp>
@@ -52,13 +53,7 @@ struct DownloadProgress {
 
 // Download configuration
 struct DownloadConfig {
-    // Segment limits
-    static constexpr std::uint32_t MAX_SEGMENTS = 16;
-    static constexpr std::uint32_t MIN_SEGMENTS = 2;
-    static constexpr std::uint64_t DEFAULT_SEGMENT_SIZE = 5'000'000;  // 5 MB
-    static constexpr std::uint32_t IO_TIMEOUT_SEC = 30;
-    static constexpr std::uint32_t RETRY_COUNT = 3;
-
+    // Segment limits (use global constants from config.hpp)
     std::uint32_t max_segments{MAX_SEGMENTS};
     std::uint32_t min_segments{MIN_SEGMENTS};
     std::uint64_t segment_size{DEFAULT_SEGMENT_SIZE};

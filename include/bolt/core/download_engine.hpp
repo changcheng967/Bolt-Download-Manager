@@ -60,6 +60,7 @@ struct DownloadConfig {
     bool auto_segment{true};              // Auto-adjust segment count
     bool work_stealing{true};             // Enable work stealing
     bool use_http2{true};                 // Prefer HTTP/2
+    std::uint64_t speed_limit{0};         // Speed limit in bytes/sec (0 = unlimited)
 };
 
 // Download event callback

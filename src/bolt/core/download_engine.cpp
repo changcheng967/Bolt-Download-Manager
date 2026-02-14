@@ -161,11 +161,20 @@ void DownloadEngine::create_segments(std::uint64_t /*bandwidth_bps*/) noexcept {
     std::uint64_t offset = 0;
     std::uint64_t file_offset = 0;
 
+    // Calculate per-segment speed limit (divide total limit by segment count)
+    std::uint64_t per_segment_limit = 0;
+    if (config_.speed_limit > 0 && seg_count > 0) {
+        per_segment_limit = config_.speed_limit / seg_count;
+    }
+
     std::uint32_t id = 0;
     while (offset < file_size_) {
         std::uint64_t this_size = std::min(seg_size, file_size_ - offset);
         auto seg = std::make_unique<Segment>(id++, url_, offset, this_size, file_offset);
         seg->file_writer(&file_writer_);
+        if (per_segment_limit > 0) {
+            seg->set_speed_limit(per_segment_limit);
+        }
         segments_.push_back(std::move(seg));
         offset += this_size;
         file_offset += this_size;
@@ -428,6 +437,13 @@ void DownloadEngine::dynamic_segmentation() noexcept {
             );
             new_seg->file_writer(&file_writer_);
             new_seg->curl_share(curl_share_handle_);
+
+            // Set speed limit if configured
+            if (config_.speed_limit > 0) {
+                // Divide limit by total segment count
+                std::uint64_t per_segment_limit = config_.speed_limit / (active_count + 1);
+                new_seg->set_speed_limit(per_segment_limit);
+            }
 
             // Start the new segment immediately
             (void)new_seg->start();

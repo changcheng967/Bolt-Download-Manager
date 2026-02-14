@@ -168,6 +168,11 @@ std::error_code Segment::start() noexcept {
             curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, static_cast<long>(STALL_TIMEOUT_SEC));
             curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1L);
 
+            // Speed limit (0 = unlimited)
+            if (speed_limit_ > 0) {
+                curl_easy_setopt(curl, CURLOPT_MAX_RECV_SPEED_LARGE, static_cast<curl_off_t>(speed_limit_));
+            }
+
             // SSL options
             curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
             curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);

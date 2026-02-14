@@ -114,6 +114,9 @@ public:
     // Set resolved IP for CURLOPT_RESOLVE (skips DNS lookup)
     void set_resolved_ip(const std::string& ip) noexcept { resolved_ip_ = ip; }
 
+    // Set speed limit in bytes per second (0 = unlimited)
+    void set_speed_limit(std::uint64_t bytes_per_second) noexcept { speed_limit_ = bytes_per_second; }
+
     // Set new state
     void state(SegmentState new_state) noexcept { state_.store(new_state, std::memory_order_release); }
 
@@ -142,6 +145,7 @@ private:
     void* curl_handle_{nullptr};  // CURL* handle
     void* curl_share_handle_{nullptr};  // CURLSH* share handle for DNS/SSL sharing
     std::string resolved_ip_;  // Pre-resolved IP for CURLOPT_RESOLVE
+    std::uint64_t speed_limit_{0};  // Speed limit in bytes per second (0 = unlimited)
     bolt::disk::FileWriter* file_writer_{nullptr};  // File writer for saving data
     std::jthread segment_thread_;  // Thread for async download
     std::atomic<bool> stop_requested_{false};  // Signal for curl progress callback

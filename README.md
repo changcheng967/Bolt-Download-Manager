@@ -117,7 +117,7 @@ cli/browser/gui → core → disk
 
 *IDM measured manually under identical conditions
 
-![Benchmark Results](docs/benchmark.png)
+![Benchmark Results](docs/benchmark.jpg)
 
 BoltDM achieves **213+ MB/s peak speed** (4x IDM's peak) with 16 parallel segments, work stealing, and async overlapped I/O. Average speed now matches IDM.
 

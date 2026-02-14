@@ -22,8 +22,6 @@ namespace chrono = std::chrono;
 
 namespace bolt::cli {
 
-const char* SPINNER_FRAMES[] = {"-", "\\", "|", "/"};
-
 //=============================================================================
 // Argument parsing
 //=============================================================================
@@ -141,8 +139,9 @@ CliResult download(const std::string& url,
     }
 
     auto start_result = engine->start();
-    if (start_result) {
-        std::cout << "Error: Failed to start download: " << start_result << std::endl;
+    if (start_result) {  // error_code.operator bool() returns true if error exists
+        if (!quiet) bar.clear();
+        std::cout << "Error: Failed to start download: " << start_result.message() << std::endl;
         DownloadEngine::global_cleanup();
         return std::unexpected(start_result);
     }

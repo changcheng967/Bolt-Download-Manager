@@ -1,0 +1,10 @@
+{
+  "name": "com.boltdm.host",
+  "description": "Bolt Download Manager Native Host",
+  "path": "C:\\Program Files\\BoltDM\\boltdm_host.exe",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://EXTENSION_ID_HERE/",
+    "moz-extension://EXTENSION_ID_HERE/"
+  ]
+}

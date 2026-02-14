@@ -796,6 +796,11 @@ void MainWindow::update_status() {
         speed_str = QString("%1 B/s").arg(total_speed);
     }
     status_speed_->setText(QString("Speed: %1").arg(speed_str));
+
+    // Update speed graph
+    if (speed_graph_) {
+        speed_graph_->add_sample(total_speed);
+    }
 }
 
 void MainWindow::save_downloads() {

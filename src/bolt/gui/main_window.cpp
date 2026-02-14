@@ -644,7 +644,32 @@ void MainWindow::on_clipboard_changed() {
     if (text != last_clipboard_text_ &&
         (text.startsWith("http://") || text.startsWith("https://"))) {
         last_clipboard_text_ = text;
-        // Show popup to add download
+
+        // Check if URL looks like a file (has common file extensions)
+        bool looks_like_file = text.contains(".zip", Qt::CaseInsensitive) ||
+                               text.contains(".exe", Qt::CaseInsensitive) ||
+                               text.contains(".msi", Qt::CaseInsensitive) ||
+                               text.contains(".rar", Qt::CaseInsensitive) ||
+                               text.contains(".7z", Qt::CaseInsensitive) ||
+                               text.contains(".mp4", Qt::CaseInsensitive) ||
+                               text.contains(".mkv", Qt::CaseInsensitive) ||
+                               text.contains(".mp3", Qt::CaseInsensitive) ||
+                               text.contains(".iso", Qt::CaseInsensitive) ||
+                               text.contains(".bin", Qt::CaseInsensitive) ||
+                               text.contains(".pdf", Qt::CaseInsensitive);
+
+        if (looks_like_file) {
+            // Show Add Download dialog pre-filled with URL
+            if (!add_dialog_) {
+                add_dialog_ = std::make_unique<AddDialog>(this);
+            }
+            add_dialog_->set_url(text);
+
+            if (add_dialog_->exec() == QDialog::Accepted) {
+                auto [url, path] = add_dialog_->get_result();
+                add_download(url, path);
+            }
+        }
     }
 }
 

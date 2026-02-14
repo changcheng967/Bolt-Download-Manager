@@ -226,7 +226,7 @@ std::error_code Segment::start() noexcept {
                     int retries = 0;
                     constexpr int MAX_RETRIES = 3;
                     while (retries < MAX_RETRIES && !stop_requested_.load(std::memory_order_relaxed)) {
-                        std::this_thread::sleep_for(std::chrono::seconds(1));
+                        std::this_thread::sleep_for(std::chrono::milliseconds(200));  // Fast retry
                         ++retries;
                         fprintf(stderr, "Segment %u: retry %d/%d after error %d\n", id_, retries, MAX_RETRIES, result);
 

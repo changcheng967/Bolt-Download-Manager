@@ -23,6 +23,12 @@ std::string DownloadMeta::meta_path(std::string_view output_path) {
 
 std::error_code DownloadMeta::save(std::string_view path) const noexcept {
     try {
+        // Create parent directories if they don't exist
+        std::filesystem::path p(path);
+        if (p.has_parent_path()) {
+            std::filesystem::create_directories(p.parent_path());
+        }
+
         std::ofstream file(std::string(path), std::ios::binary | std::ios::trunc);
         if (!file) {
             return make_error_code(disk::DiskErrc::write_error);

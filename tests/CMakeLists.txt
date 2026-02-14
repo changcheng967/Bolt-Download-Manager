@@ -12,6 +12,7 @@ target_sources(bolt_tests PRIVATE
     url_tests.cpp
     segment_tests.cpp
     bandwidth_tests.cpp
+    download_meta_tests.cpp
 )
 
 target_include_directories(bolt_tests PRIVATE

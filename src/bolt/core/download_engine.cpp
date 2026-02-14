@@ -2,6 +2,7 @@
 
 #include <bolt/core/download_engine.hpp>
 #include <bolt/core/config.hpp>
+#include <curl/curl.h>
 #include <algorithm>
 
 namespace bolt::core {
@@ -85,13 +86,10 @@ std::error_code DownloadEngine::prepare() noexcept {
         supports_ranges_ = false;
     }
 
-    // Probe bandwidth by downloading first 512KB
-    std::uint64_t bandwidth = 10'000'000; // 10 MB/s default fallback
-    BandwidthProber prober(url_);
-    auto probe_result = prober.probe(2000);  // 2 second probe
-    if (probe_result) {
-        bandwidth = *probe_result;
-    }
+    // Skip bandwidth probe - use smart default based on file size
+    // For files that support ranges, use 8 segments as a good default
+    // This saves 2+ seconds of probing overhead
+    std::uint64_t bandwidth = 100'000'000; // 100 MB/s assumption for modern connections
 
     seg_calculator_ = std::make_unique<SegmentCalculator>(file_size_);
 
@@ -108,6 +106,7 @@ std::error_code DownloadEngine::prepare() noexcept {
                 auto seg = std::make_unique<Segment>(sm.id, url_, sm.offset, sm.size, sm.file_offset);
                 seg->file_writer(&file_writer_);
                 seg->set_downloaded(sm.downloaded);  // Resume from where we left off
+                seg->curl_share(curl_share_handle_);  // Share DNS/SSL cache
                 segments_.push_back(std::move(seg));
             }
         }
@@ -132,7 +131,7 @@ std::error_code DownloadEngine::prepare() noexcept {
     return {};
 }
 
-void DownloadEngine::create_segments(std::uint64_t bandwidth_bps) noexcept {
+void DownloadEngine::create_segments(std::uint64_t /*bandwidth_bps*/) noexcept {
     segments_.clear();
 
     if (!supports_ranges_ || file_size_ < MIN_SEGMENT_SIZE) {
@@ -143,11 +142,18 @@ void DownloadEngine::create_segments(std::uint64_t bandwidth_bps) noexcept {
         return;
     }
 
-    std::uint32_t seg_count = config_.auto_segment
-        ? seg_calculator_->optimal_segments(bandwidth_bps)
-        : config_.max_segments;
+    // Smart defaults based on file size - zero startup delay
+    // Adaptive adjustment happens during download based on actual speed
+    std::uint32_t seg_count;
+    if (file_size_ >= 50 * 1024 * 1024) {        // > 50 MB
+        seg_count = 8;
+    } else if (file_size_ >= 10 * 1024 * 1024) { // > 10 MB
+        seg_count = 4;
+    } else {
+        seg_count = 1;  // Small files don't need multiple segments
+    }
 
-    std::uint64_t seg_size = seg_calculator_->optimal_segment_size(seg_count);
+    std::uint64_t seg_size = (file_size_ + seg_count - 1) / seg_count;  // Round up
     std::uint64_t offset = 0;
     std::uint64_t file_offset = 0;
 

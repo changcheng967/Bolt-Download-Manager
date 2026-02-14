@@ -176,6 +176,10 @@ private:
     std::unique_ptr<BandwidthProber> prober_;
     std::unique_ptr<SegmentCalculator> seg_calculator_;
 
+    // Shared curl resources for faster segment startup
+    void* curl_share_handle_{nullptr};  // CURLSH* for DNS/SSL sharing
+    std::string resolved_ip_;  // Pre-resolved IP for all segments
+
     DownloadCallback callback_;
     std::mutex callback_mutex_;  // Protects callback_ access
     HttpSession http_session_;

@@ -187,6 +187,19 @@ std::error_code Segment::start() noexcept {
             // TCP optimizations - disable Nagle's algorithm for lower latency
             curl_easy_setopt(curl, CURLOPT_TCP_NODELAY, 1L);
 
+            // Share DNS cache and SSL sessions between segments
+            if (curl_share_handle_) {
+                curl_easy_setopt(curl, CURLOPT_SHARE, curl_share_handle_);
+            }
+
+            // Pre-resolved DNS - skip DNS lookup if we have the IP
+            if (!resolved_ip_.empty()) {
+                struct curl_slist* dns = nullptr;
+                std::string resolve_entry = url_.host() + ":" + url_.port() + ":" + resolved_ip_;
+                dns = curl_slist_append(dns, resolve_entry.c_str());
+                curl_easy_setopt(curl, CURLOPT_RESOLVE, dns);
+            }
+
             state(SegmentState::downloading);
 
             auto result = curl_easy_perform(curl);

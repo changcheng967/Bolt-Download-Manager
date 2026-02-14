@@ -105,6 +105,12 @@ public:
     void file_writer(bolt::disk::FileWriter* writer) noexcept { file_writer_ = writer; }
     [[nodiscard]] bolt::disk::FileWriter* file_writer() const noexcept { return file_writer_; }
 
+    // Set curl share handle for DNS/SSL session sharing
+    void curl_share(void* share) noexcept { curl_share_handle_ = share; }
+
+    // Set resolved IP for CURLOPT_RESOLVE (skips DNS lookup)
+    void set_resolved_ip(const std::string& ip) noexcept { resolved_ip_ = ip; }
+
     // Set new state
     void state(SegmentState new_state) noexcept { state_.store(new_state, std::memory_order_release); }
 
@@ -131,6 +137,8 @@ private:
     std::atomic<std::uint64_t> atomic_speed_bytes_{0};  // Accumulated bytes for speed calc
 
     void* curl_handle_{nullptr};  // CURL* handle
+    void* curl_share_handle_{nullptr};  // CURLSH* share handle for DNS/SSL sharing
+    std::string resolved_ip_;  // Pre-resolved IP for CURLOPT_RESOLVE
     bolt::disk::FileWriter* file_writer_{nullptr};  // File writer for saving data
     std::jthread segment_thread_;  // Thread for async download
     std::atomic<bool> stop_requested_{false};  // Signal for curl progress callback

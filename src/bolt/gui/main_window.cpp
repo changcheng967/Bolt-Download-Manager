@@ -747,8 +747,8 @@ void MainWindow::check_queue() {
 
     // Find queued (not started) downloads and start them
     for (auto& [id, widget] : downloads_) {
-        if (widget && !widget->is_active()) {
-            // This download is not active, check if it's queued (has URL but not started)
+        if (widget && widget->is_queued() && !widget->is_active()) {
+            // This download is queued - start it
             widget->start();
             ++active;
             if (active >= max_concurrent_downloads_) break;

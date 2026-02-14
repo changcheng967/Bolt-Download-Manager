@@ -230,6 +230,7 @@ void DownloadWidget::start() {
         return;
     }
 
+    started_ = true;
     label_filename_->setText(QString("Downloading: %1").arg(QString::fromStdString(engine_->filename())));
     btn_start_->setEnabled(false);
     btn_pause_->setEnabled(true);

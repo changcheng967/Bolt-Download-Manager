@@ -47,6 +47,7 @@ public:
 
     // State queries
     [[nodiscard]] bool is_active() const;
+    [[nodiscard]] bool is_queued() const noexcept { return !started_; }
     [[nodiscard]] std::uint64_t current_speed() const;
 
 signals:
@@ -86,6 +87,7 @@ private:
 
     QString url_;
     QString output_path_;
+    bool started_{false};  // Track if download was started
 };
 
 } // namespace bolt::gui

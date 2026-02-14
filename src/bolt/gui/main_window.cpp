@@ -442,6 +442,16 @@ void MainWindow::add_download(const QString& url, const QString& save_path) {
     download_list_->addItem(item);
 
     download_list_->setCurrentItem(item);
+
+    // Auto-start if under concurrent limit
+    if (active_download_count() < max_concurrent_downloads_) {
+        widget->start();
+    }
+
+    // Connect finished signal
+    connect(widget, &DownloadWidget::finished, this, [this, id]() {
+        on_download_finished(id);
+    });
 }
 
 DownloadWidget* MainWindow::get_download(std::uint32_t id) const {
@@ -588,6 +598,41 @@ void MainWindow::on_download_finished(std::uint32_t id) {
     auto* widget = get_download(id);
     if (widget) {
         // Show notification
+        if (tray_icon_) {
+            tray_icon_->show_message("Download Complete",
+                QString("Download %1 has finished").arg(id));
+        }
+    }
+
+    // Start next queued download
+    check_queue();
+}
+
+std::uint32_t MainWindow::active_download_count() const {
+    std::uint32_t count = 0;
+    for (const auto& [id, widget] : downloads_) {
+        if (widget && widget->is_active()) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+void MainWindow::check_queue() {
+    // Count active downloads
+    auto active = active_download_count();
+
+    // If below max, start queued downloads
+    if (active >= max_concurrent_downloads_) return;
+
+    // Find queued (not started) downloads and start them
+    for (auto& [id, widget] : downloads_) {
+        if (widget && !widget->is_active()) {
+            // This download is not active, check if it's queued (has URL but not started)
+            widget->start();
+            ++active;
+            if (active >= max_concurrent_downloads_) break;
+        }
     }
 }
 

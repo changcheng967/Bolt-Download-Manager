@@ -91,4 +91,10 @@ QString TrayIcon::format_tooltip() const {
         .arg(active_downloads_);
 }
 
+void TrayIcon::show_message(const QString& title, const QString& message) {
+    if (tray_icon_) {
+        tray_icon_->showMessage(title, message, QSystemTrayIcon::Information, 3000);
+    }
+}
+
 } // namespace bolt::gui

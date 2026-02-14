@@ -103,6 +103,13 @@ private:
     std::map<std::uint32_t, DownloadWidget*> downloads_;
     std::uint32_t next_download_id_{1};
 
+    // Download queue settings
+    std::uint32_t max_concurrent_downloads_{3};
+
+    // Queue management
+    void check_queue();
+    [[nodiscard]] std::uint32_t active_download_count() const;
+
     // Clipboard monitoring
     QString last_clipboard_text_;
 

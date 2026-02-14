@@ -22,6 +22,7 @@ public:
     void set_active_count(std::uint32_t count);
     void show();
     void hide();
+    void show_message(const QString& title, const QString& message);
 
 signals:
     void show_window();

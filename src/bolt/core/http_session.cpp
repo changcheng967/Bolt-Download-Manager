@@ -318,8 +318,8 @@ void* HttpSession::acquire_connection(const std::string& host) noexcept {
     // Create new connection
     CURL* curl = curl_easy_init();
     if (curl) {
-        // Default options for pooled connections
-        curl_easy_setopt(curl, CURLOPT_FORBID_REUSE, 1L);
+        // Default options for pooled connections - enable reuse
+        curl_easy_setopt(curl, CURLOPT_FORBID_REUSE, 0L);
         curl_easy_setopt(curl, CURLOPT_PIPEWAIT, 1L);
 
         ConnectionEntry entry;

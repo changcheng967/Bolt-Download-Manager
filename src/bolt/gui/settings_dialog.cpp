@@ -7,6 +7,7 @@
 #include <QGroupBox>
 #include <QPushButton>
 #include <QLabel>
+#include <QSettings>
 
 namespace bolt::gui {
 
@@ -82,6 +83,56 @@ SettingsDialog::SettingsDialog(QWidget* parent)
 }
 
 SettingsDialog::~SettingsDialog() = default;
+
+int SettingsDialog::max_concurrent_downloads() const {
+    return spin_simultaneous_ ? spin_simultaneous_->value() : 3;
+}
+
+int SettingsDialog::max_segments() const {
+    return spin_max_segments_ ? spin_max_segments_->value() : 16;
+}
+
+bool SettingsDialog::clipboard_monitor_enabled() const {
+    return check_clipboard_monitor_ ? check_clipboard_monitor_->isChecked() : true;
+}
+
+bool SettingsDialog::dark_theme_enabled() const {
+    return check_dark_theme_ ? check_dark_theme_->isChecked() : true;
+}
+
+void SettingsDialog::load_settings() {
+    QSettings settings("changcheng967", "BoltDM");
+
+    if (spin_simultaneous_) {
+        spin_simultaneous_->setValue(settings.value("maxConcurrentDownloads", 3).toInt());
+    }
+    if (spin_max_segments_) {
+        spin_max_segments_->setValue(settings.value("maxSegments", 16).toInt());
+    }
+    if (check_clipboard_monitor_) {
+        check_clipboard_monitor_->setChecked(settings.value("clipboardMonitor", true).toBool());
+    }
+    if (check_dark_theme_) {
+        check_dark_theme_->setChecked(settings.value("darkTheme", true).toBool());
+    }
+}
+
+void SettingsDialog::save_settings() {
+    QSettings settings("changcheng967", "BoltDM");
+
+    if (spin_simultaneous_) {
+        settings.setValue("maxConcurrentDownloads", spin_simultaneous_->value());
+    }
+    if (spin_max_segments_) {
+        settings.setValue("maxSegments", spin_max_segments_->value());
+    }
+    if (check_clipboard_monitor_) {
+        settings.setValue("clipboardMonitor", check_clipboard_monitor_->isChecked());
+    }
+    if (check_dark_theme_) {
+        settings.setValue("darkTheme", check_dark_theme_->isChecked());
+    }
+}
 
 void SettingsDialog::setup_general_tab() {
     auto* widget = new QWidget();
@@ -251,7 +302,7 @@ void SettingsDialog::setup_appearance_tab() {
 }
 
 void SettingsDialog::apply_settings() {
-    // TODO: Save to settings file
+    save_settings();
 }
 
 } // namespace bolt::gui

@@ -16,6 +16,16 @@ public:
     explicit SettingsDialog(QWidget* parent = nullptr);
     ~SettingsDialog() override;
 
+    // Getters for settings
+    [[nodiscard]] int max_concurrent_downloads() const;
+    [[nodiscard]] int max_segments() const;
+    [[nodiscard]] bool clipboard_monitor_enabled() const;
+    [[nodiscard]] bool dark_theme_enabled() const;
+
+    // Load/save settings
+    void load_settings();
+    void save_settings();
+
 private slots:
     void apply_settings();
 

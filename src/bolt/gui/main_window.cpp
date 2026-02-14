@@ -682,7 +682,15 @@ void MainWindow::on_settings() {
     if (!settings_dialog_) {
         settings_dialog_ = std::make_unique<SettingsDialog>(this);
     }
-    settings_dialog_->exec();
+
+    // Load current settings into dialog
+    settings_dialog_->load_settings();
+
+    if (settings_dialog_->exec() == QDialog::Accepted) {
+        // Apply settings
+        max_concurrent_downloads_ = static_cast<std::uint32_t>(settings_dialog_->max_concurrent_downloads());
+        // Note: max_segments would need to be passed to DownloadEngine when creating downloads
+    }
 }
 
 void MainWindow::on_about() {

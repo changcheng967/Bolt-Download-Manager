@@ -398,6 +398,18 @@ void Segment::add_bytes(std::uint64_t bytes) noexcept {
     // Note: file_offset stays the same, we just increase HTTP range
 }
 
+void Segment::reduce_range(std::uint64_t new_end) noexcept {
+    // Reduce segment size to end at new_end
+    // This is called during dynamic segmentation when splitting a segment
+    if (new_end > offset_) {
+        std::uint64_t new_size = new_end - offset_;
+        if (new_size < size_) {
+            size_ = new_size;
+            progress_.total_bytes = new_size;
+        }
+    }
+}
+
 std::uint64_t Segment::remaining() const noexcept {
     auto downloaded = atomic_downloaded_.load(std::memory_order_relaxed);
     if (downloaded >= size_) return 0;

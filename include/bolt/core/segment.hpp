@@ -73,6 +73,9 @@ public:
     // Remove bytes (for work stealing sender)
     void steal_bytes(std::uint64_t bytes) noexcept;
 
+    // Reduce segment range (for dynamic segmentation)
+    void reduce_range(std::uint64_t new_end) noexcept;
+
     // Getters
     [[nodiscard]] std::uint32_t id() const noexcept { return id_; }
     [[nodiscard]] SegmentState state() const noexcept { return state_.load(std::memory_order_acquire); }

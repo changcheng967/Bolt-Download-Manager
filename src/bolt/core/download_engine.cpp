@@ -303,6 +303,9 @@ void DownloadEngine::download_loop(std::stop_token stoken) noexcept {
             attempt_work_stealing();
         }
 
+        // Dynamic segmentation - split large segments when connections free up
+        dynamic_segmentation();
+
         // Check completion (update_progress already writes completed/failed under lock)
         std::uint32_t completed = 0;
         std::uint32_t failed = 0;
@@ -375,6 +378,60 @@ void DownloadEngine::attempt_work_stealing() noexcept {
                     }
                 }
             }
+        }
+    }
+}
+
+void DownloadEngine::dynamic_segmentation() noexcept {
+    // Find completed segments and segments with most remaining bytes
+    Segment* largest_segment = nullptr;
+    std::uint64_t max_remaining = 0;
+    std::uint32_t active_count = 0;
+
+    for (auto& seg : segments_) {
+        auto st = seg->state();
+        if (st == SegmentState::downloading || st == SegmentState::connecting) {
+            ++active_count;
+        }
+
+        // Find segment with most bytes remaining (that's still downloading)
+        if (st == SegmentState::downloading) {
+            auto prog = seg->progress();
+            std::uint64_t remaining = prog.total_bytes - prog.downloaded_bytes;
+            if (remaining > max_remaining) {
+                max_remaining = remaining;
+                largest_segment = seg.get();
+            }
+        }
+    }
+
+    // If we have fewer active segments than max and a large segment exists, split it
+    if (active_count < config_.max_segments && largest_segment && max_remaining > MIN_SEGMENT_SIZE * 2) {
+        // Calculate split point (half of remaining)
+        auto prog = largest_segment->progress();
+        std::uint64_t remaining = prog.total_bytes - prog.downloaded_bytes;
+        std::uint64_t split_bytes = remaining / 2;
+
+        if (split_bytes >= MIN_SEGMENT_SIZE) {
+            // Reduce the largest segment's range
+            std::uint64_t new_end = largest_segment->offset() + prog.downloaded_bytes + split_bytes;
+            largest_segment->reduce_range(new_end);
+
+            // Create a new segment for the second half
+            std::uint32_t new_id = static_cast<std::uint32_t>(segments_.size());
+            auto new_seg = std::make_unique<Segment>(
+                new_id,
+                url_,
+                new_end,  // Start where we split
+                split_bytes,  // Size of second half
+                new_end  // File offset
+            );
+            new_seg->file_writer(&file_writer_);
+            new_seg->curl_share(curl_share_handle_);
+
+            // Start the new segment immediately
+            (void)new_seg->start();
+            segments_.push_back(std::move(new_seg));
         }
     }
 }

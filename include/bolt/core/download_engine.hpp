@@ -142,6 +142,9 @@ private:
     // Perform work stealing if needed
     void attempt_work_stealing() noexcept;
 
+    // Dynamic segmentation - split largest remaining segment when one finishes
+    void dynamic_segmentation() noexcept;
+
     // Update overall progress
     void update_progress() noexcept;
 

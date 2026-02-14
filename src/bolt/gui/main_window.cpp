@@ -40,6 +40,8 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QDesktopServices>
+#include <QFileInfo>
 
 namespace bolt::gui {
 
@@ -655,7 +657,25 @@ void MainWindow::on_cancel_selected() {
 }
 
 void MainWindow::on_open_folder() {
-    // Open the download folder in explorer
+    int row = download_table_->currentRow();
+    if (row < 0) return;
+
+    auto* name_item = download_table_->item(row, 0);
+    if (!name_item) return;
+
+    auto* widget = get_download(name_item->data(Qt::UserRole).toUInt());
+    if (widget) {
+        QString path = widget->output_path();
+        if (!path.isEmpty()) {
+            QFileInfo info(path);
+            QString dir = info.absolutePath();
+            QDesktopServices::openUrl(QUrl::fromLocalFile(dir));
+        } else {
+            // Default to Downloads folder
+            QString downloads = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
+            QDesktopServices::openUrl(QUrl::fromLocalFile(downloads));
+        }
+    }
 }
 
 void MainWindow::on_settings() {

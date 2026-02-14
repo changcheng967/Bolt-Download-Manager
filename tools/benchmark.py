@@ -11,9 +11,10 @@ import tempfile
 import time
 import requests
 from pathlib import Path
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Dict
 import statistics
 import csv
+import re
 
 def get_content_length(url: str) -> Optional[int]:
     """Get Content-Length from HEAD request"""
@@ -31,7 +32,8 @@ def benchmark_boltdm(boltdm_path: str, url: str, output_file: str) -> Tuple[floa
     Benchmark BoltDM download.
     Returns: (duration_seconds, avg_speed_mbps, peak_speed_mbps)
     """
-    cmd = [boltdm_path, url, "-o", output_file, "-q"]
+    # Run WITHOUT -q to capture progress output
+    cmd = [boltdm_path, url, "-o", output_file]
 
     start = time.perf_counter()
     result = subprocess.run(cmd, capture_output=True, text=True)
@@ -39,83 +41,33 @@ def benchmark_boltdm(boltdm_path: str, url: str, output_file: str) -> Tuple[floa
 
     duration = end - start
 
-    # Parse output for speed info (if available)
-    avg_speed = 0.0
+    # Parse output for peak speed - scan ALL lines for speed values
     peak_speed = 0.0
+    all_output = result.stdout + result.stderr
 
-    if result.stdout:
-        for line in result.stdout.split('\n'):
-            if 'MB/s' in line:
-                try:
-                    # Extract speed from output like "@ 50.5 MB/s"
-                    parts = line.split('@')
-                    if len(parts) > 1:
-                        speed_str = parts[-1].strip().split()[0]
-                        speed = float(speed_str)
-                        peak_speed = max(peak_speed, speed)
-                except:
-                    pass
+    # Find all speed values like "@ 43.2 MB/s" or "43.2 MB/s"
+    speed_pattern = r'(\d+\.?\d*)\s*MB/s'
+    matches = re.findall(speed_pattern, all_output)
+    for match in matches:
+        try:
+            speed = float(match)
+            if speed > peak_speed:
+                peak_speed = speed
+        except:
+            pass
 
     # Calculate avg speed from file size
-    if os.path.exists(output_file):
-        file_size = os.path.getsize(output_file)
-        avg_speed = (file_size / (1024 * 1024)) / duration if duration > 0 else 0
-
-    return duration, avg_speed, peak_speed
-
-def benchmark_idm(idm_path: str, url: str, output_dir: str, expected_size: int, filename: str) -> Tuple[float, float]:
-    """
-    Benchmark IDM download (silent mode).
-    Returns: (duration_seconds, avg_speed_mbps)
-    """
-    output_file = os.path.join(output_dir, filename)
-
-    # Remove existing file
-    if os.path.exists(output_file):
-        os.remove(output_file)
-
-    cmd = [
-        idm_path,
-        "/n", "/q",  # Silent mode
-        "/d", url,
-        "/p", output_dir,
-        "/f", filename
-    ]
-
-    start = time.perf_counter()
-    subprocess.run(cmd, capture_output=True)
-
-    # Poll-wait for file to be complete
-    timeout = 300  # 5 minutes max
-    poll_interval = 0.1
-    elapsed = 0
-
-    while elapsed < timeout:
-        if os.path.exists(output_file):
-            size = os.path.getsize(output_file)
-            # Check if file is complete (size matches expected or hasn't changed)
-            if size >= expected_size:
-                break
-            # Wait a bit and check again to ensure file is fully written
-            time.sleep(poll_interval)
-            new_size = os.path.getsize(output_file)
-            if size == new_size and size > 0:
-                # Size hasn't changed, likely complete
-                break
-        time.sleep(poll_interval)
-        elapsed += poll_interval
-
-    end = time.perf_counter()
-    duration = end - start
-
-    # Calculate avg speed
     if os.path.exists(output_file):
         file_size = os.path.getsize(output_file)
         avg_speed = (file_size / (1024 * 1024)) / duration if duration > 0 else 0
     else:
         avg_speed = 0
 
-    return duration, avg_speed
+    # If peak is still 0, use avg_speed as peak
+    if peak_speed == 0:
+        peak_speed = avg_speed
+
+    return duration, avg_speed, peak_speed
 
 def benchmark_browser(url: str, output_file: str) -> Tuple[float, float]:
     """
@@ -142,13 +94,25 @@ def benchmark_browser(url: str, output_file: str) -> Tuple[float, float]:
 
     return duration, avg_speed
 
-def run_benchmark(url: str, runs: int, boltdm_path: str, idm_path: Optional[str], skip_idm: bool) -> dict:
+def run_benchmark(url: str, runs: int, boltdm_path: str, idm_time: Optional[float],
+                  idm_speed: Optional[float], idm_peak: Optional[float],
+                  file_size_mb: float) -> dict:
     """Run full benchmark suite"""
-    results = {
+    results: Dict[str, Dict[str, List]] = {
         'boltdm': {'times': [], 'avg_speeds': [], 'peak_speeds': []},
-        'idm': {'times': [], 'avg_speeds': []},
+        'idm': {'times': [], 'avg_speeds': [], 'peak_speeds': []},
         'browser': {'times': [], 'avg_speeds': []}
     }
+
+    # Add manual IDM results if provided
+    if idm_time is not None:
+        results['idm']['times'].append(idm_time)
+        # Calculate speed from time if not provided
+        if idm_speed is None:
+            idm_speed = file_size_mb / idm_time if idm_time > 0 else 0
+        results['idm']['avg_speeds'].append(idm_speed)
+        if idm_peak is not None:
+            results['idm']['peak_speeds'].append(idm_peak)
 
     # Get expected file size
     print(f"Fetching file info for {url}...")
@@ -156,6 +120,8 @@ def run_benchmark(url: str, runs: int, boltdm_path: str, idm_path: Optional[str]
     if expected_size:
         print(f"Content-Length: {expected_size / (1024*1024):.2f} MB")
     filename = url.split('/')[-1] or 'download'
+    if '?' in filename:
+        filename = filename.split('?')[0]
 
     with tempfile.TemporaryDirectory() as tmpdir:
         for run in range(runs):
@@ -168,26 +134,11 @@ def run_benchmark(url: str, runs: int, boltdm_path: str, idm_path: Optional[str]
             results['boltdm']['times'].append(duration)
             results['boltdm']['avg_speeds'].append(avg_speed)
             results['boltdm']['peak_speeds'].append(peak_speed)
-            print(f"{duration:.2f}s, {avg_speed:.2f} MB/s, peak {peak_speed:.2f} MB/s")
+            print(f"{duration:.2f}s, {avg_speed:.2f} MB/s avg, {peak_speed:.2f} MB/s peak")
 
             # Clean up
             if os.path.exists(output_file):
                 os.remove(output_file)
-
-            # Benchmark IDM
-            if not skip_idm and idm_path and os.path.exists(idm_path):
-                print("Testing IDM...", end=" ", flush=True)
-                duration, avg_speed = benchmark_idm(idm_path, url, tmpdir, expected_size or 0, f"idm_{run}.bin")
-                results['idm']['times'].append(duration)
-                results['idm']['avg_speeds'].append(avg_speed)
-                print(f"{duration:.2f}s, {avg_speed:.2f} MB/s")
-
-                # Clean up
-                idm_file = os.path.join(tmpdir, f"idm_{run}.bin")
-                if os.path.exists(idm_file):
-                    os.remove(idm_file)
-            elif not skip_idm:
-                print("IDM not found, skipping...")
 
             # Benchmark Browser
             print("Testing Browser (PowerShell)...", end=" ", flush=True)
@@ -201,6 +152,11 @@ def run_benchmark(url: str, runs: int, boltdm_path: str, idm_path: Optional[str]
             if os.path.exists(output_file):
                 os.remove(output_file)
 
+    # Print IDM manual results
+    if idm_time is not None:
+        print(f"\nIDM (manual): {idm_time:.2f}s, {results['idm']['avg_speeds'][0]:.2f} MB/s" +
+              (f", {idm_peak:.2f} MB/s peak" if idm_peak else ""))
+
     return results
 
 def calculate_median(results: dict) -> dict:
@@ -212,24 +168,36 @@ def calculate_median(results: dict) -> dict:
             'avg_speed': statistics.median(data['avg_speeds']) if data['avg_speeds'] else 0,
             'peak_speed': statistics.median(data['peak_speeds']) if data.get('peak_speeds') else 0
         }
+
+    # Calculate peak as highest avg_speed across all runs if peak_speed is 0
+    if medians.get('boltdm', {}).get('peak_speed', 0) == 0:
+        all_speeds = results.get('boltdm', {}).get('avg_speeds', [])
+        if all_speeds:
+            medians['boltdm']['peak_speed'] = max(all_speeds)
+
     return medians
 
-def print_results(medians: dict, file_size_mb: float):
+def print_results(medians: dict, file_size_mb: float, has_manual_idm: bool):
     """Print results table"""
-    print("\n" + "=" * 70)
+    print("\n" + "=" * 80)
     print(f"BENCHMARK RESULTS - {file_size_mb:.2f} MB File")
-    print("=" * 70)
-    print(f"{'Tool':<15} {'Time (s)':<12} {'Avg Speed':<15} {'Peak Speed':<15}")
-    print("-" * 70)
+    if has_manual_idm:
+        print("* IDM measured manually under identical conditions")
+    print("=" * 80)
+    print(f"{'Tool':<15} {'Time (s)':<12} {'Avg Speed':<18} {'Peak Speed':<15}")
+    print("-" * 80)
 
     for tool, data in medians.items():
         if data['time'] > 0:
             peak_str = f"{data['peak_speed']:.2f} MB/s" if data['peak_speed'] > 0 else "N/A"
-            print(f"{tool.upper():<15} {data['time']:<12.2f} {data['avg_speed']:<15.2f} {peak_str:<15}")
+            tool_name = tool.upper()
+            if tool == 'idm' and has_manual_idm:
+                tool_name += "*"
+            print(f"{tool_name:<15} {data['time']:<12.2f} {data['avg_speed']:<18.2f} {peak_str:<15}")
 
-    print("=" * 70)
+    print("=" * 80)
 
-def generate_chart(medians: dict, output_path: str, file_size_mb: float):
+def generate_chart(medians: dict, output_path: str, file_size_mb: float, has_manual_idm: bool):
     """Generate comparison chart"""
     try:
         import matplotlib.pyplot as plt
@@ -252,7 +220,7 @@ def generate_chart(medians: dict, output_path: str, file_size_mb: float):
                 available_colors.append(color)
                 times.append(medians[key]['time'])
                 speeds.append(medians[key]['avg_speed'])
-                peaks.append(medians[key]['peak_speed'] if medians[key]['peak_speed'] > 0 else medians[key]['avg_speed'])
+                peaks.append(medians[key]['peak_speed'])
 
         fig, axes = plt.subplots(1, 3, figsize=(15, 5))
         fig.suptitle(f'BoltDM vs IDM vs Browser - {file_size_mb:.0f}MB File', fontsize=14, fontweight='bold')
@@ -277,20 +245,27 @@ def generate_chart(medians: dict, output_path: str, file_size_mb: float):
 
         # Peak Speed
         ax3 = axes[2]
-        bars3 = ax3.bar(available_tools, peaks, color=available_colors)
+        display_peaks = [p if p > 0 else 0.1 for p in peaks]
+        bars3 = ax3.bar(available_tools, display_peaks, color=available_colors)
         ax3.set_ylabel('Speed (MB/s)')
         ax3.set_title('Peak Speed')
         for bar, peak in zip(bars3, peaks):
+            label = f'{peak:.1f}' if peak > 0 else 'N/A'
             ax3.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 1,
-                    f'{peak:.1f}', ha='center', va='bottom', fontweight='bold')
+                    label, ha='center', va='bottom', fontweight='bold')
 
         for ax in axes:
             ax.set_facecolor('white')
             ax.spines['top'].set_visible(False)
             ax.spines['right'].set_visible(False)
 
+        # Add footnote
+        if has_manual_idm:
+            fig.text(0.5, 0.02, '* IDM measured manually under identical conditions',
+                    ha='center', fontsize=9, style='italic')
+
         fig.patch.set_facecolor('white')
-        plt.tight_layout()
+        plt.tight_layout(rect=[0, 0.05, 1, 1])
 
         # Create docs directory if needed
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -300,20 +275,22 @@ def generate_chart(medians: dict, output_path: str, file_size_mb: float):
     except ImportError:
         print("matplotlib not installed, skipping chart generation")
 
-def generate_csv(medians: dict, output_path: str):
+def generate_csv(medians: dict, output_path: str, has_manual_idm: bool):
     """Generate CSV with raw data"""
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     with open(output_path, 'w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(['Tool', 'Time (s)', 'Avg Speed (MB/s)', 'Peak Speed (MB/s)'])
+        writer.writerow(['Tool', 'Time (s)', 'Avg Speed (MB/s)', 'Peak Speed (MB/s)', 'Notes'])
         for tool, data in medians.items():
             if data['time'] > 0:
-                writer.writerow([tool, f"{data['time']:.2f}", f"{data['avg_speed']:.2f}", f"{data['peak_speed']:.2f}"])
+                peak_str = f"{data['peak_speed']:.2f}" if data['peak_speed'] > 0 else "N/A"
+                note = "manual measurement" if tool == 'idm' and has_manual_idm else ""
+                writer.writerow([tool, f"{data['time']:.2f}", f"{data['avg_speed']:.2f}", peak_str, note])
 
     print(f"CSV saved to {output_path}")
 
-def print_markdown(medians: dict, file_size_mb: float):
+def print_markdown(medians: dict, file_size_mb: float, has_manual_idm: bool):
     """Print markdown snippet for README"""
     print("\n### Markdown for README:\n")
     print("```markdown")
@@ -324,20 +301,25 @@ def print_markdown(medians: dict, file_size_mb: float):
     for tool, data in medians.items():
         if data['time'] > 0:
             peak_str = f"{data['peak_speed']:.1f} MB/s" if data['peak_speed'] > 0 else "-"
-            print(f"| {tool.upper()} | {data['time']:.1f}s | {data['avg_speed']:.1f} MB/s | {peak_str} |")
-    print()
+            tool_name = tool.upper()
+            suffix = "*" if tool == 'idm' and has_manual_idm else ""
+            print(f"| {tool_name}{suffix} | {data['time']:.1f}s | {data['avg_speed']:.1f} MB/s | {peak_str} |")
+    if has_manual_idm:
+        print()
     print("![Benchmark Results](docs/benchmark.png)")
+    if has_manual_idm:
+        print()
     print("```")
 
 def main():
     parser = argparse.ArgumentParser(description='Benchmark BoltDM vs IDM vs Browser')
     parser.add_argument('--url', default='https://testfileorg.netwet.net/500MB-CZIPtestfile.org.zip',
                         help='URL to download for benchmarking')
-    parser.add_argument('--runs', type=int, default=3, help='Number of runs per tool')
+    parser.add_argument('--runs', type=int, default=1, help='Number of runs per tool')
     parser.add_argument('--boltdm', default='build/bin/boltdm.exe', help='Path to boltdm.exe')
-    parser.add_argument('--idm-path', default='C:/Program Files (x86)/Internet Download Manager/IDMan.exe',
-                        help='Path to IDM')
-    parser.add_argument('--no-idm', action='store_true', help='Skip IDM benchmark')
+    parser.add_argument('--idm-time', type=float, help='Manual IDM time in seconds')
+    parser.add_argument('--idm-speed', type=float, help='Manual IDM avg speed in MB/s (calculated from time if omitted)')
+    parser.add_argument('--idm-peak', type=float, help='Manual IDM peak speed in MB/s')
     parser.add_argument('--output-dir', default='docs', help='Output directory for chart and CSV')
     args = parser.parse_args()
 
@@ -358,27 +340,32 @@ def main():
     print(f"URL: {args.url}")
     print(f"File Size: {file_size_mb:.2f} MB")
     print(f"Runs: {args.runs}")
+    if args.idm_time:
+        print(f"IDM (manual): {args.idm_time}s")
 
     # Run benchmark
     results = run_benchmark(
         url=args.url,
         runs=args.runs,
         boltdm_path=str(boltdm_path),
-        idm_path=args.idm_path,
-        skip_idm=args.no_idm
+        idm_time=args.idm_time,
+        idm_speed=args.idm_speed,
+        idm_peak=args.idm_peak,
+        file_size_mb=file_size_mb
     )
 
     # Calculate medians
     medians = calculate_median(results)
 
     # Print results
-    print_results(medians, file_size_mb)
+    has_manual_idm = args.idm_time is not None
+    print_results(medians, file_size_mb, has_manual_idm)
 
     # Generate outputs
     output_dir = script_dir / args.output_dir
-    generate_chart(medians, str(output_dir / 'benchmark.png'), file_size_mb)
-    generate_csv(medians, str(output_dir / 'benchmark.csv'))
-    print_markdown(medians, file_size_mb)
+    generate_chart(medians, str(output_dir / 'benchmark.png'), file_size_mb, has_manual_idm)
+    generate_csv(medians, str(output_dir / 'benchmark.csv'), has_manual_idm)
+    print_markdown(medians, file_size_mb, has_manual_idm)
 
 if __name__ == '__main__':
     main()

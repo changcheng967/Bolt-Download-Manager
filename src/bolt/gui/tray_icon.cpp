@@ -2,6 +2,9 @@
 
 #include <bolt/gui/tray_icon.hpp>
 #include <QApplication>
+#include <QPainter>
+#include <QPainterPath>
+#include <QPen>
 
 namespace bolt::gui {
 

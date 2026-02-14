@@ -28,12 +28,12 @@ SpeedGraph::SpeedGraph(QWidget* parent)
 SpeedGraph::~SpeedGraph() = default;
 
 void SpeedGraph::setup_chart() {
-    chart_ = new QtCharts::QChart();
+    chart_ = new QChart();
     chart_->setMargins({0, 0, 0, 0});
     chart_->setBackgroundRoundness(0);
 
     // Series for speed data
-    series_ = new QtCharts::QLineSeries();
+    series_ = new QLineSeries();
     series_->setUseOpenGL(true);
     QPen pen(QColor(0x00, 0x78, 0xd4));
     pen.setWidth(2);
@@ -41,7 +41,7 @@ void SpeedGraph::setup_chart() {
     chart_->addSeries(series_);
 
     // X axis (time)
-    axis_x_ = new QtCharts::QValueAxis();
+    axis_x_ = new QValueAxis();
     axis_x_->setRange(0, static_cast<double>(max_samples_));
     axis_x_->setLabelsVisible(false);
     axis_x_->setGridLineVisible(false);
@@ -50,7 +50,7 @@ void SpeedGraph::setup_chart() {
     series_->attachAxis(axis_x_);
 
     // Y axis (speed)
-    axis_y_ = new QtCharts::QValueAxis();
+    axis_y_ = new QValueAxis();
     axis_y_->setRange(0, 10);  // Will auto-scale
     axis_y_->setLabelFormat("%.1f");
     axis_y_->setGridLinePen(QPen(QColor(80, 80, 80), 1, Qt::DashLine));
@@ -60,9 +60,9 @@ void SpeedGraph::setup_chart() {
     series_->attachAxis(axis_y_);
 
     // Chart view
-    chart_view_ = new QtCharts::QChartView(chart_, this);
+    chart_view_ = new QChartView(chart_, this);
     chart_view_->setRenderHint(QPainter::Antialiasing);
-    chart_view_->setRubberBand(QtCharts::QChartView::NoRubberBand);
+    chart_view_->setRubberBand(QChartView::NoRubberBand);
 
     // Dark theme styling
     chart_->setBackgroundBrush(QBrush(QColor(30, 30, 30)));

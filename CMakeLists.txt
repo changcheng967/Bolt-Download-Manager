@@ -44,7 +44,12 @@ add_subdirectory(src/bolt/cli)
 # Find optional dependencies
 find_package(spdlog CONFIG QUIET)
 find_package(nlohmann_json CONFIG QUIET)
-find_package(Qt6 6 QUIET COMPONENTS Core Widgets Charts Svg Network)
+
+# Qt6 - check common installation paths
+if(NOT DEFINED CMAKE_PREFIX_PATH)
+    set(CMAKE_PREFIX_PATH "C:/Qt/6.10.2/msvc2022_64")
+endif()
+find_package(Qt6 6 COMPONENTS Core Widgets Charts Svg Network)
 find_package(Catch2 3 QUIET)
 
 # GUI application (requires Qt6)

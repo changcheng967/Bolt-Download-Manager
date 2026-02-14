@@ -3,10 +3,7 @@
 #pragma once
 
 #include <QWidget>
-#include <QChart>
-#include <QChartView>
-#include <QLineSeries>
-#include <QValueAxis>
+#include <QtCharts>
 #include <deque>
 #include <cstdint>
 
@@ -30,11 +27,11 @@ protected:
 private:
     void setup_chart();
 
-    QtCharts::QChart* chart_{nullptr};
-    QtCharts::QChartView* chart_view_{nullptr};
-    QtCharts::QLineSeries* series_{nullptr};
-    QtCharts::QValueAxis* axis_x_{nullptr};
-    QtCharts::QValueAxis* axis_y_{nullptr};
+    QChart* chart_{nullptr};
+    QChartView* chart_view_{nullptr};
+    QLineSeries* series_{nullptr};
+    QValueAxis* axis_x_{nullptr};
+    QValueAxis* axis_y_{nullptr};
 
     std::deque<std::uint64_t> samples_;
     std::size_t max_samples_{300};  // 5 minutes at 1 sample per second

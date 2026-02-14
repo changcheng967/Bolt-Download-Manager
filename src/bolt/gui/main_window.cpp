@@ -8,6 +8,7 @@
 #include <bolt/gui/about_dialog.hpp>
 #include <bolt/gui/tray_icon.hpp>
 #include <bolt/version.hpp>
+#include <bolt/core/download_engine.hpp>
 
 #include <QListWidget>
 #include <QListWidgetItem>
@@ -30,6 +31,8 @@
 #include <QStyleFactory>
 #include <QDir>
 #include <QTabWidget>
+#include <QMimeData>
+#include <QDropEvent>
 
 namespace bolt::gui {
 
@@ -138,7 +141,7 @@ MainWindow::MainWindow(QWidget* parent)
 
     DownloadEngine::global_init();
 
-    setWindowTitle(QString("Bolt Download Manager %1").arg(version.to_string().c_str()));
+    setWindowTitle(QString("Bolt Download Manager %1").arg(bolt::version.to_string().c_str()));
     resize(1000, 650);
     setAcceptDrops(true);
 

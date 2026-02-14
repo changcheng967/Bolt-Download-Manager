@@ -40,7 +40,7 @@ int main(int argc, char* argv[]) {
 
     app.setApplicationName("BoltDM");
     app.setApplicationDisplayName("Bolt Download Manager");
-    app.setApplicationVersion(version.to_string().c_str());
+    app.setApplicationVersion(bolt::version.to_string().c_str());
     app.setOrganizationName("changcheng967");
 
     apply_default_style();

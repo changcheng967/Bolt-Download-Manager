@@ -6,6 +6,11 @@
 #include <QWidget>
 #include <memory>
 
+// Import DownloadProgress for use in this header
+using bolt::core::DownloadProgress;
+using bolt::core::DownloadEngine;
+using bolt::core::DownloadState;
+
 class QProgressBar;
 class QLabel;
 class QPushButton;
@@ -53,6 +58,7 @@ private:
 
     std::uint32_t id_;
     std::unique_ptr<DownloadEngine> engine_;
+    DownloadProgress cached_progress_;  // Thread-safe progress cache
 
     // UI elements
     QLabel* label_filename_{nullptr};

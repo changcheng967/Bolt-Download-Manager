@@ -5,6 +5,7 @@
 #include <QDialog>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QLabel>
 #include <memory>
 
 namespace bolt::gui {

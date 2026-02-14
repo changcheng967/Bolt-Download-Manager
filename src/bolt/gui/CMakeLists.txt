@@ -22,6 +22,16 @@ target_sources(boltdm_gui PRIVATE
     settings_dialog.cpp
     about_dialog.cpp
     tray_icon.cpp
+
+    # Headers for MOC processing
+    ${CMAKE_SOURCE_DIR}/include/bolt/gui/main_window.hpp
+    ${CMAKE_SOURCE_DIR}/include/bolt/gui/download_widget.hpp
+    ${CMAKE_SOURCE_DIR}/include/bolt/gui/segment_widget.hpp
+    ${CMAKE_SOURCE_DIR}/include/bolt/gui/speed_graph.hpp
+    ${CMAKE_SOURCE_DIR}/include/bolt/gui/add_dialog.hpp
+    ${CMAKE_SOURCE_DIR}/include/bolt/gui/settings_dialog.hpp
+    ${CMAKE_SOURCE_DIR}/include/bolt/gui/about_dialog.hpp
+    ${CMAKE_SOURCE_DIR}/include/bolt/gui/tray_icon.hpp
 )
 
 target_include_directories(boltdm_gui PRIVATE

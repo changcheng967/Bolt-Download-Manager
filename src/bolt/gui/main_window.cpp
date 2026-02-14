@@ -35,6 +35,11 @@
 #include <QStackedWidget>
 #include <QMimeData>
 #include <QDropEvent>
+#include <QStandardPaths>
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonArray>
+#include <QJsonObject>
 
 namespace bolt::gui {
 
@@ -804,11 +809,51 @@ void MainWindow::update_status() {
 }
 
 void MainWindow::save_downloads() {
-    // Save download queue to disk
+    // Save download queue to JSON file in app data
+    QString data_dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    QDir().mkpath(data_dir);
+
+    QString filepath = data_dir + "/downloads.json";
+    QFile file(filepath);
+    if (!file.open(QIODevice::WriteOnly)) return;
+
+    QJsonArray downloads_array;
+    for (const auto& [id, widget] : downloads_) {
+        QJsonObject obj;
+        obj["id"] = static_cast<int>(id);
+        obj["url"] = widget->url();
+        obj["outputPath"] = widget->output_path();
+        obj["state"] = static_cast<int>(widget->state());
+        downloads_array.append(obj);
+    }
+
+    QJsonDocument doc(downloads_array);
+    file.write(doc.toJson());
+    file.close();
 }
 
 void MainWindow::load_downloads() {
-    // Load download queue from disk
+    QString data_dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    QString filepath = data_dir + "/downloads.json";
+
+    QFile file(filepath);
+    if (!file.open(QIODevice::ReadOnly)) return;
+
+    QByteArray data = file.readAll();
+    file.close();
+
+    QJsonDocument doc = QJsonDocument::fromJson(data);
+    if (!doc.isArray()) return;
+
+    for (const auto& val : doc.array()) {
+        QJsonObject obj = val.toObject();
+        QString url = obj["url"].toString();
+        QString outputPath = obj["outputPath"].toString();
+
+        if (!url.isEmpty()) {
+            add_download(url, outputPath);
+        }
+    }
 }
 
 } // namespace bolt::gui

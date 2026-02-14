@@ -34,6 +34,11 @@ public:
     void set_url(const QString& url);
     void set_output_path(const QString& path);
 
+    // Getters
+    [[nodiscard]] QString url() const noexcept { return url_; }
+    [[nodiscard]] QString output_path() const noexcept { return output_path_; }
+    [[nodiscard]] DownloadState state() const noexcept { return engine_->state(); }
+
     // Control methods
     void start();
     void pause();
